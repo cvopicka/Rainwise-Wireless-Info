@@ -44,8 +44,8 @@ Here is a guess on the data as best as I have decoded by comparing the data to m
 |10|Wind Speed MPH * 10|1E|*|
 |11|Wind Direction Degrees|00|45|
 |12|Wind Direction Degrees|2D|-|
-|13||3D||
-|14||C2||
+|13||3D|Rain|
+|14||C2|Rain|
 |15||EB||
 |16||04||
 |17||B4||
