@@ -30,8 +30,12 @@ XML_URL = os.environ.get("XML_URL", "").strip()
 XML_INTERVAL = float(os.environ.get("XML_INTERVAL", "60"))
 DB_PATH = os.environ.get("DB_PATH", "/data/rainwise.db")
 STATS_EVERY = float(os.environ.get("STATS_EVERY", "600"))
-ELEVATION_FT = float(os.environ.get("ELEVATION_FT", "0") or 0)   # 0 = no sea-level correction
-BARO_OFFSET = float(os.environ.get("BARO_OFFSET", "0") or 0)     # inHg, calibration vs. airport
+ELEVATION_FT = float(
+    os.environ.get("ELEVATION_FT", "0") or 0
+)  # 0 = no sea-level correction
+BARO_OFFSET = float(
+    os.environ.get("BARO_OFFSET", "0") or 0
+)  # inHg, calibration vs. airport
 
 HEADER = bytes([0x33, 0x80, 0x00])
 PACKET_LEN = 32
@@ -47,52 +51,59 @@ def utc_now():
 
 # ------------------------------------------------------------------ protocol
 def crc16_xmodem(data: bytes) -> int:
+    """https://reveng.sourceforge.io/crc-catalogue/16.htm (check "123456789" = 0x31C3)"""
     crc = 0
     for b in data:
         crc ^= b << 8
         for _ in range(8):
-            crc = ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+            crc = (
+                ((crc << 1) ^ 0x1021) & 0xFFFF if crc & 0x8000 else (crc << 1) & 0xFFFF
+            )
     return crc
 
 
 def crc_ok(pkt: bytes) -> bool:
-    return len(pkt) == PACKET_LEN and crc16_xmodem(pkt[:30]) == int.from_bytes(pkt[30:32], "big")
+    return len(pkt) == PACKET_LEN and crc16_xmodem(pkt[:30]) == int.from_bytes(
+        pkt[30:32], "big"
+    )
 
 
 def u16(p, i):
-    return int.from_bytes(p[i:i + 2], "big")
+    return int.from_bytes(p[i : i + 2], "big")
 
 
 def sea_level_inhg(station_inhg: float) -> float:
-    """NWS altimeter setting (what airports and most weather networks report)."""
-    if station_inhg < 10:          # no/garbage reading
+    """NWS altimeter setting (what airports and most weather networks report).
+    Formula: https://www.weather.gov/media/epz/wxcalc/altimeterSetting.pdf"""
+    if station_inhg < 10:  # no/garbage reading
         return None
     if not ELEVATION_FT:
         return round(station_inhg + BARO_OFFSET, 2)
     n = 0.190284
+    k = 1013.25**n * 0.0065 / 288  # = 8.42288e-5, NWS constants
     p_hpa = station_inhg * 33.8639
-    a_hpa = ((p_hpa - 0.3) ** n + 8.4184960528e-5 * ELEVATION_FT * 0.3048) ** (1 / n)
+    a_hpa = ((p_hpa - 0.3) ** n + k * ELEVATION_FT * 0.3048) ** (1 / n)
     return round(a_hpa / 33.8639 + BARO_OFFSET, 2)
 
 
 def decode(p: bytes) -> dict:
     """Byte numbers in comments are 1-based, matching the README table."""
     return {
-        "temp_f":        int.from_bytes(p[3:5], "big", signed=True) / 10,  # 4-5
-        "humidity_pct":  p[5],                                             # 6
-        "baro_inhg":     u16(p, 6) / 1000,                                 # 7-8 station pressure
-        "baro_sl_inhg":  sea_level_inhg(u16(p, 6) / 1000),                 # corrected to sea level
-        "wind_mph":      u16(p, 8) / 10,                                   # 9-10
-        "wind_dir_deg":  u16(p, 10),                                       # 11-12
-        "rain_count":    p[12],                                            # 13 tip counter, 0.01 in/tip, wraps at 256
-        "rain_chk_ok":   int(p[12] + p[13] == 0xFF),                       # 14 = 255 - byte 13
-        "b15":           p[14],                                            # 15 flips with battery
-        "b16":           p[15],                                            # 16 constant 04
-        "b17_18_le":     p[16] | (p[17] << 8),                             # 17-18 16-bit LOW byte first
-        "b19":           p[18],                                            # 19
-        "batt_v":        u16(p, 19) / 100,                                 # 20-21
-        "supply2_v":     u16(p, 21) / 100,                                 # 22-23 2nd voltage, not solar
-        "b24_30_hex":    p[23:30].hex(" ").upper(),                        # 24-30 unused sensors?
+        "temp_f": int.from_bytes(p[3:5], "big", signed=True) / 10,  # 4-5
+        "humidity_pct": p[5],  # 6
+        "baro_inhg": u16(p, 6) / 1000,  # 7-8 station pressure
+        "baro_sl_inhg": sea_level_inhg(u16(p, 6) / 1000),  # corrected to sea level
+        "wind_mph": u16(p, 8) / 10,  # 9-10
+        "wind_dir_deg": u16(p, 10),  # 11-12
+        "rain_count": p[12],  # 13 tip counter, 0.01 in/tip, wraps at 256
+        "rain_chk_ok": int(p[12] + p[13] == 0xFF),  # 14 = 255 - byte 13
+        "b15": p[14],  # 15 flips with battery
+        "b16": p[15],  # 16 constant 04
+        "b17_18_le": p[16] | (p[17] << 8),  # 17-18 16-bit LOW byte first
+        "b19": p[18],  # 19
+        "batt_v": u16(p, 19) / 100,  # 20-21
+        "supply2_v": u16(p, 21) / 100,  # 22-23 2nd voltage, not solar
+        "b24_30_hex": p[23:30].hex(" ").upper(),  # 24-30 unused sensors?
     }
 
 
@@ -175,7 +186,9 @@ def db_writer(q: queue.Queue):
         cols = ", ".join(row)
         marks = ", ".join("?" for _ in row)
         try:
-            con.execute(f"INSERT INTO {table} ({cols}) VALUES ({marks})", list(row.values()))
+            con.execute(
+                f"INSERT INTO {table} ({cols}) VALUES ({marks})", list(row.values())
+            )
             con.commit()
         except sqlite3.Error as e:
             log(f"db error: {e}")
@@ -186,17 +199,28 @@ stats = {"serial": 0, "udp": 0, "udp_bad": 0, "xml": 0, "xml_err": 0}
 
 
 def store_packet(q, pkt, source):
-    q.put(("packets", {"ts_utc": utc_now(), "source": source,
-                       "raw_hex": pkt.hex(" ").upper(), **decode(pkt)}))
+    q.put(
+        (
+            "packets",
+            {
+                "ts_utc": utc_now(),
+                "source": source,
+                "raw_hex": pkt.hex(" ").upper(),
+                **decode(pkt),
+            },
+        )
+    )
 
 
 def serial_reader(q):
     import serial  # pyserial
+
     framer = Framer()
     while True:
         try:
-            with serial.Serial(SERIAL_PORT, BAUD, bytesize=8, parity="N",
-                               stopbits=1, timeout=1) as ser:
+            with serial.Serial(
+                SERIAL_PORT, BAUD, bytesize=8, parity="N", stopbits=1, timeout=1
+            ) as ser:
                 log(f"serial open: {SERIAL_PORT} @ {BAUD}")
                 while True:
                     for pkt in framer.feed(ser.read(64)):

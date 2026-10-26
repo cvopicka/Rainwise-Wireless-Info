@@ -1,4 +1,5 @@
-# Rainwise MK3-LR logger for TrueNAS (Apps > Custom App > Install via YAML)
+# Rainwise MK3-LR logger for TrueNAS (Apps > Discover > ⋮ menu > Install via YAML)
+# https://apps.truenas.com/managing-apps/installing-custom-apps/
 #
 # Before installing:
 #   1. Create a dataset, e.g. /mnt/tank/apps/rainwise

@@ -41,6 +41,8 @@ The serial data stream is 9600 8N1.  This also matched some info I had located a
 
 **Checksum details (confirmed):** CRC-16/XMODEM, polynomial `0x1021`, initial value `0x0000`, no input/output reflection, no final XOR. Calculated over bytes 1-30 including the header. Verified against every distinct packet captured so far.
 
+These parameters come from the [CRC RevEng catalogue][crc-cat], the standard reference for identifying CRCs. Every entry has a "check" value: the CRC of the ASCII text `123456789`. For CRC-16/XMODEM that's `0x31C3`, and `rainwise_logger.py --test` checks it. The catalogue's [legend page][crc-legend] explains what each parameter (width, poly, init, refin, refout, xorout) means. It's a good starting point for learning how CRCs work.
+
 ```python
 def crc16_xmodem(data: bytes) -> int:
     crc = 0
@@ -82,7 +84,7 @@ Status key: ✅ confirmed against the IP-100 · ⚠️ partly understood · ❓ 
 - **Wind speed (09-10):** confirmed 2026-10-25 by spinning the anemometer by hand. Updates in every packet and matched the IP-100 value exactly at each step (1.2 → 2.8 → 0.0 mph). The 2024 mismatch (3.0 vs 5.4) was just a timing difference between packet and snapshot.
 - **Wind gust:** not in the packet. The IP-100 tracked a 2.8 mph gust that equals the highest live speed sent, so gust is calculated by the receiving end from the live wind speed.
 - **Wind direction (11-12):** confirmed 2026-10-25 by moving the tail: 337° → 135° → 157°, matching the IP-100 and updating live.
-- **Rain (13-14):** confirmed 2026-10-25. About 4 oz of water poured into the gauge: byte 13 went `E1` → `E9` (8 tips) and the IP-100 daily rain went 0.00 → 0.08 in. The Oracle YTD went 10.95 → 11.03 in (+0.08). So **0.01 in per tip**. Byte 14 always equals 255 − byte 13 (`E1`/`1E`, `E9`/`16`, `3D`/`C2`), a simple check byte. Tips show up in the next packet, within about 2 s.
+- **Rain (13-14):** confirmed 2026-10-25. About 4 oz of water poured into the gauge: byte 13 went `E1` → `E9` (8 tips) and the IP-100 daily rain went 0.00 → 0.08 in. The Oracle YTD went 10.95 → 11.03 in (+0.08). So **0.01 in per tip**, which matches Rainwise's own spec for their rain gauge ([Rainwise rain gauge][rw-gauge]). Byte 14 always equals 255 − byte 13 (`E1`/`1E`, `E9`/`16`, `3D`/`C2`), a simple check byte. Tips show up in the next packet, within about 2 s.
 - **Rain counter wrap:** byte 13 is a running 8-bit count, not a daily or YTD total, and rolls over from 255 to 0. Rain amount = (new − old) mod 256 × 0.01 in. The station sends a packet every 2 s, so a wrap can't be missed in practice.
 - **Byte 15:** flips between `D8` and `D9` in step with the battery voltage (`D8` when battery is higher). Probably a raw analog reading, not a counter.
 - **Bytes 17-18:** read low byte first (`byte18 × 256 + byte17`) they form a smooth value around 45,500-46,000 that moves opposite to the battery voltage. Read high byte first, byte 17 looks like noise. Probably a raw ADC channel, possibly a reference voltage. Not wind gust: it only changes at the once-a-minute update and didn't react to the anemometer test.
@@ -194,22 +196,34 @@ The IP-100 serves its status XML live at `http://<ip100-address>/status.xml` (re
 
 The station sends **station pressure**: the real air pressure where the barometer sits. Weather reports, airports and most weather websites show pressure **corrected to sea level**, so stations at different elevations can be compared. At a few thousand feet the difference is about 4 inHg, so an uncorrected reading looks "wrong" next to the local forecast even though it isn't.
 
-Both tools add a `baro_sl_inhg` value alongside the raw `baro_inhg`. It uses the NWS **altimeter setting** formula, the same correction airports report in METARs:
+Both tools add a `baro_sl_inhg` value alongside the raw `baro_inhg`. It uses the NWS **altimeter setting** formula, the same correction airports report in METARs ([NWS formula sheet][nws-alt]):
 
 ```
 P  = station pressure in hPa (inHg × 33.8639)
 h  = barometer elevation in meters (feet × 0.3048)
-A  = ((P − 0.3)^0.190284 + 8.4184960528e-5 × h)^(1 / 0.190284)
+n  = 0.190284
+
+NWS form:   A = (P − 0.3) × (1 + ((1013.25^n × 0.0065 / 288) × h / (P − 0.3)^n))^(1/n)
+Same thing: A = ((P − 0.3)^n + k × h)^(1/n),   k = 1013.25^n × 0.0065 / 288 ≈ 8.42288e-5
+
 sea-level inHg = A / 33.8639 + offset
 ```
 
-It needs only pressure and elevation, so unlike the full mean-sea-level reduction it doesn't swing with outside temperature.
+What the constants are:
+
+- **1013.25 hPa** (29.92 inHg): standard sea-level pressure.
+- **0.0065 K/m**: standard temperature lapse rate (temperature drops 6.5 °C per km of height).
+- **288 K** (15 °C): standard sea-level temperature, rounded. The exact standard-atmosphere value is 288.15 K; using it changes the result by about 0.002 inHg.
+- **n = 0.190284**: comes from the physics of the standard atmosphere (lapse rate × gas constant ÷ (gravity × molar mass of air)).
+- **0.3 hPa**: a small allowance NWS uses because the barometer reading isn't taken at exactly the reference height.
+
+Because it uses the *standard* atmosphere instead of today's actual temperature, it doesn't swing with outside temperature. That's the main difference from "mean sea-level pressure" (MSLP), which uses the station's recent temperatures and can be unreliable at high elevations ([NWS pressure definitions][nws-defs]).
 
 **Setup:**
 
 1. Find the elevation of the barometer itself, in feet (the Oracle display or IP-100 box, wherever the pressure sensor is, not the ground at the mast). A GPS, a topo map or an online elevation lookup works.
 2. Logger: `--elevation-ft <feet>` or set `RAINWISE_ELEVATION_FT`. Service: `ELEVATION_FT` in `docker-compose.yml`.
-3. Calibrate: compare `baro_sl_inhg` with the altimeter setting from the nearest airport METAR on a calm day with steady pressure. Put the difference in `--baro-offset` / `BARO_OFFSET`. Small differences (±0.03 inHg) are normal sensor tolerance.
+3. Calibrate: compare `baro_sl_inhg` with the altimeter setting from the nearest airport METAR on a calm day with steady pressure. In a METAR the altimeter setting is the `A` group, e.g. `A3028` = 30.28 inHg ([METAR format][metar]). ASOS stations send their hourly report a few minutes before the top of the hour, usually at :53 ([NWS observations FAQ][nws-obs]), so compare readings from that minute. Put the difference in `--baro-offset` / `BARO_OFFSET`. Small differences (±0.03 inHg) are normal sensor tolerance.
 
 The elevation is kept out of the repo on purpose: it's a setting, not a value in the code. With elevation `0` no correction is applied.
 
@@ -258,11 +272,54 @@ Only one program can open the serial port at a time. While testing on the PC, ru
 - 9 V power supply
 - Suspect RS-485 or RS-422, half duplex
 
-To identify: with a meter, look for a pair that sits at a steady few hundred mV while idle and flickers during transmissions (A/B data pair). The other two pins are likely 9 V and ground. Then try a USB-RS485 adapter on A/B at 9600 8N1.
+To identify: with a meter, look for a pair that sits at a steady few hundred mV while idle and flickers during transmissions (A/B data pair). The other two pins are likely 9 V and ground. Then try a USB-RS485 adapter on A/B at 9600 8N1. TI's [RS-485 Design Guide][ti-485] covers signal levels, termination and idle-bus "failsafe" biasing, which is what that steady idle voltage is.
 
 ## LoRa replacement plan
 
 - **Transmitter:** read the 32-byte packets from the station's controller at 9600 8N1 and send them over LoRa. Only the framing (header, length, CRC) is needed, not the full decode.
-- **Rate:** wind speed, direction and rain change in every 2-second packet, and the display calculates gusts from those live values. So the link should forward every packet, or at least every packet that changed. At about 60 ms of airtime per packet that's around 3 % of the channel, well within LoRa limits. Sending once a minute would lose gusts.
+- **Rate:** wind speed, direction and rain change in every 2-second packet, and the display calculates gusts from those live values. So the link should forward every packet, or at least every packet that changed. A 32-byte packet at SF7 / 125 kHz / CR 4/5 takes about 70 ms on air, so one every 2 s is roughly 3.5 % of the channel, well within LoRa limits. Sending once a minute would lose gusts. Airtime is calculated with the formula in the Semtech SX1276 datasheet ([Semtech forum thread][lora-toa], [TTN airtime spreadsheet][ttn-airtime]); higher spreading factors reach farther but take much longer.
 - **Receiver (ESP32 + LoRa):** check the CRC, write the original packet to the Oracle display port so it sees the same stream as before, and forward the packet over Wi-Fi (UDP 5005) to the NAS logger.
 - **Hardware notes:** the XBee runs on 3.3 V, so a 3.3 V LoRa board can share its power and UART pins. Check whether the boards use the XBee's sleep or reset lines.
+
+## References
+
+**Pressure**
+
+- [NWS – Altimeter Setting formula][nws-alt] (PDF): the formula used for `baro_sl_inhg`.
+- [NWS Boulder – Pressure definitions][nws-defs]: station pressure vs. sea-level pressure vs. altimeter setting, in plain language.
+- [NWS – Pressure Altitude formula][nws-palt] (PDF): companion sheet, the reverse problem (what altitude a pressure corresponds to).
+- [Wikipedia – METAR][metar]: how to read airport weather reports, including the `A` (altimeter) group.
+- [NWS Chicago – Weather observations FAQ][nws-obs]: when ASOS stations send their hourly reports.
+
+**Checksum**
+
+- [CRC RevEng – 16-bit CRC catalogue][crc-cat]: parameters and check values for CRC-16/XMODEM and its relatives.
+- [CRC RevEng – Catalogue legend][crc-legend]: what each CRC parameter means.
+
+**Radio and serial**
+
+- [Digi – XBee 3 TP (module temperature) command][xbee-tp]: the XBee's built-in temperature sensor. It's read with an AT command and is not added to the data stream, which is why bytes 22-23 couldn't be XBee temperature.
+- [Digi – Transparent operating mode][xbee-transparent]: in transparent mode an XBee is a "serial line replacement", passing bytes through unchanged (this page is from the XBee 3 Cellular guide; the concept is the same on all XBee 3 modules).
+- [TI – The RS-485 Design Guide (SLLA272)][ti-485]: differential signaling, termination, failsafe biasing.
+- [Semtech forum – LoRa time-on-air calculation][lora-toa]: points to the airtime formula in the SX126x/SX1276 datasheets.
+- [TTN forum – Spreadsheet for LoRa airtime calculation][ttn-airtime]
+
+**Hardware and software**
+
+- [Rainwise – Rain gauge][rw-gauge]: 0.01 in per tip.
+- [TrueNAS – Installing custom apps][truenas-apps]: the Install via YAML steps.
+
+[nws-alt]: https://www.weather.gov/media/epz/wxcalc/altimeterSetting.pdf
+[nws-palt]: https://www.weather.gov/media/epz/wxcalc/pressureAltitude.pdf
+[nws-defs]: https://www.weather.gov/bou/pressure_definitions
+[nws-obs]: https://www.weather.gov/lot/weather_observations_faq
+[metar]: https://en.wikipedia.org/wiki/METAR
+[crc-cat]: https://reveng.sourceforge.io/crc-catalogue/16.htm
+[crc-legend]: https://reveng.sourceforge.io/crc-catalogue/legend.htm
+[xbee-tp]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_tp.htm
+[xbee-transparent]: https://docs.digi.com/resources/documentation/digidocs/90002258/concepts/c_mode_transparent.htm
+[ti-485]: https://www.ti.com/document-viewer/lit/html/SLLA272D/GUID-46CBB394-E1DD-47D0-B4E2-118DFF92B3BB
+[lora-toa]: https://forum.lora-developers.semtech.com/t/sx126x-time-on-air-calculation/127
+[ttn-airtime]: https://www.thethingsnetwork.org/forum/t/spreadsheet-for-lora-airtime-calculation/1190
+[rw-gauge]: https://rainwise.com/wired-rain-gauge
+[truenas-apps]: https://apps.truenas.com/managing-apps/installing-custom-apps/

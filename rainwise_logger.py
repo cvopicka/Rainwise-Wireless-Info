@@ -20,7 +20,6 @@ import argparse
 import csv
 import datetime as dt
 import os
-import sys
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -34,7 +33,8 @@ SAMPLE = bytes.fromhex(
 
 # ---------------------------------------------------------------- checksum
 def crc16_xmodem(data: bytes) -> int:
-    """CRC-16/XMODEM: poly 0x1021, init 0x0000, no reflection, no final XOR."""
+    """CRC-16/XMODEM: poly 0x1021, init 0x0000, no reflection, no final XOR.
+    Parameters: https://reveng.sourceforge.io/crc-catalogue/16.htm"""
     crc = 0
     for b in data:
         crc ^= b << 8
@@ -60,15 +60,19 @@ def sea_level_inhg(
 ) -> float:
     """NWS altimeter setting: the 'sea level' barometer value airports and
     most weather networks report. Uses only station pressure + elevation,
-    so it doesn't swing with temperature."""
+    so it doesn't swing with temperature.
+    Formula: https://www.weather.gov/media/epz/wxcalc/altimeterSetting.pdf
+      Alt = (P - 0.3) * (1 + (1013.25^n * 0.0065 / 288) * h / (P - 0.3)^n)^(1/n)
+    rearranged below as ((P - 0.3)^n + k*h)^(1/n), P in hPa, h in meters."""
     if station_inhg < 10:  # no/garbage reading
         return None
     if not elevation_ft:
         return round(station_inhg + offset, 2)
     n = 0.190284
+    k = 1013.25**n * 0.0065 / 288  # = 8.42288e-5, NWS constants
     p_hpa = station_inhg * 33.8639
     h_m = elevation_ft * 0.3048
-    a_hpa = ((p_hpa - 0.3) ** n + 8.4184960528e-5 * h_m) ** (1 / n)
+    a_hpa = ((p_hpa - 0.3) ** n + k * h_m) ** (1 / n)
     return round(a_hpa / 33.8639 + offset, 2)
 
 
@@ -230,6 +234,8 @@ def run(args):
 
 
 def self_test():
+    # Standard CRC check value from the RevEng CRC catalogue: "123456789" -> 0x31C3
+    print(f"CRC-16/XMODEM check: 0x{crc16_xmodem(b'123456789'):04X} (expected 0x31C3)")
     print("Sample packet:", SAMPLE.hex(" ").upper())
     print(
         f"CRC calc 0x{crc16_xmodem(SAMPLE[:30]):04X}  stored 0x{u16(SAMPLE, 30):04X}"
@@ -248,7 +254,7 @@ if __name__ == "__main__":
     ap.add_argument("--out", default="rainwise_log.csv")
     ap.add_argument(
         "--xml-url",
-        default=os.environ.get("RAINWISE_XML_URL", "http://192.168.1.1/status.xml"),
+        default=os.environ.get("RAINWISE_XML_URL", "http://192.168.1.100/status.xml"),
         help="IP-100 status XML (or set RAINWISE_XML_URL)",
     )
     ap.add_argument("--xml-timeout", type=float, default=2.0)
