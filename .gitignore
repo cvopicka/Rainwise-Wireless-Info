@@ -1,0 +1,12 @@
+# Logged weather data (the database can contain the IP-100's serial/MAC/IP)
+*.db
+*.db-*
+*.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Local reports
+*.html

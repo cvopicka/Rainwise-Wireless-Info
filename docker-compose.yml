@@ -1,0 +1,34 @@
+# Rainwise MK3-LR logger for TrueNAS (Apps > Custom App > Install via YAML)
+#
+# Before installing:
+#   1. Create a dataset, e.g. /mnt/tank/apps/rainwise
+#   2. Copy rainwise_service.py into it
+#   3. Change the two host paths below if your pool/dataset differ
+#   4. Plug in the XBee breakout and check its name: ls /dev/serial/by-id/
+services:
+  rainwise:
+    image: python:3.12-slim
+    container_name: rainwise
+    restart: unless-stopped
+    command: >
+      sh -c "pip install --quiet --no-cache-dir pyserial &&
+             python -u /app/rainwise_service.py"
+    environment:
+      TZ: UTC                              # set to your time zone, e.g. America/Chicago
+      SERIAL_PORT: /dev/ttyUSB0            # set to "" to disable
+      BAUD: "9600"
+      UDP_PORT: "5005"                     # future ESP32/LoRa receiver; "0" to disable
+      XML_URL: http://192.168.1.1/status.xml   # your IP-100's address; "" to disable
+      XML_INTERVAL: "60"
+      DB_PATH: /data/rainwise.db
+      ELEVATION_FT: "0"                    # barometer height above sea level, in feet; 0 = no correction
+      BARO_OFFSET: "0"                     # inHg, fine-tune against a nearby airport
+    volumes:
+      - /mnt/tank/apps/rainwise:/app:ro
+      - /mnt/tank/apps/rainwise:/data
+    devices:
+      # Left side: the host's device (a /dev/serial/by-id/... path stays
+      # stable across reboots). Right side: the name the script uses.
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    ports:
+      - "5005:5005/udp"
