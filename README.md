@@ -59,24 +59,24 @@ def crc16_xmodem(data: bytes) -> int:
 
 Status key: ✅ confirmed against the IP-100 · ⚠️ partly understood · ❓ unknown
 
-| Byte  |         Field         |                Format                |  Example   |   Result    | Status |
-| :---: | --------------------- | ------------------------------------ | :--------: | ----------- | :----: |
-| 01-03 | Header                | constant                             | `33 80 00` |             |   ✅    |
-| 04-05 | Outside temperature   | signed 16-bit, °F × 10               |  `01 2B`   | 29.9 °F     |   ✅    |
-|  06   | Humidity              | 8-bit, %                             |    `4A`    | 74 %        |   ✅    |
-| 07-08 | Barometric pressure   | 16-bit, inHg × 1000                  |  `64 9B`   | 25.755 inHg |   ✅    |
-| 09-10 | Wind speed            | 16-bit, mph × 10, live               |  `00 1E`   | 3.0 mph     |   ✅    |
-| 11-12 | Wind direction        | 16-bit, degrees, live                |  `00 2D`   | 45°         |   ✅    |
-|  13   | Rain tip counter      | 8-bit, 0.01 in per tip, wraps at 256 |    `3D`    | 61          |   ✅    |
-|  14   | Rain check byte       | 255 − byte 13                        |    `C2`    |             |   ✅    |
-|  15   | Unknown analog value  | 8-bit                                |    `EB`    |             |   ❓    |
-|  16   | Unknown               | constant `04` so far                 |    `04`    |             |   ❓    |
-| 17-18 | Unknown analog value  | 16-bit, **low byte first**           |  `B4 B4`   | 46260       |   ⚠️   |
-|  19   | Unknown               | `00` so far                          |    `00`    |             |   ❓    |
-| 20-21 | Battery voltage       | 16-bit, V × 100                      |  `02 C4`   | 7.08 V      |   ✅    |
-| 22-23 | Second supply voltage | 16-bit, V × 100                      |  `02 A6`   | 6.78 V      |   ⚠️   |
-| 24-30 | Unused                | all `00` so far                      |  `00 ...`  |             |   ❓    |
-| 31-32 | Checksum              | CRC-16/XMODEM                        |  `AC 5E`   |             |   ✅    |
+| Byte  |                  Field                   |                        Format                         |  Example   |   Result    | Status |
+| :---: | ---------------------------------------- | ----------------------------------------------------- | :--------: | ----------- | :----: |
+| 01-03 | Header                                   | constant                                              | `33 80 00` |             |   ✅    |
+| 04-05 | Outside temperature                      | signed 16-bit, °F × 10                                |  `01 2B`   | 29.9 °F     |   ✅    |
+|  06   | Humidity                                 | 8-bit, %                                              |    `4A`    | 74 %        |   ✅    |
+| 07-08 | Barometric pressure                      | 16-bit, inHg × 1000                                   |  `64 9B`   | 25.755 inHg |   ✅    |
+| 09-10 | Wind speed                               | 16-bit, mph × 10, live                                |  `00 1E`   | 3.0 mph     |   ✅    |
+| 11-12 | Wind direction                           | 16-bit, degrees, live                                 |  `00 2D`   | 45°         |   ✅    |
+|  13   | Rain tip counter                         | 8-bit, 0.01 in per tip, wraps at 256                  |    `3D`    | 61          |   ✅    |
+|  14   | Rain check byte                          | 255 − byte 13                                         |    `C2`    |             |   ✅    |
+|  15   | Station voltage (as shown by the IP-100) | 8-bit, V ≈ 0.0291 × value + 0.20                      |    `EB`    | 7.04 V      |   ✅    |
+|  16   | Status flags                             | bit 0 = low-voltage flag? (`04` normal, `05` flagged) |    `04`    |             |   ⚠️   |
+| 17-18 | Unknown analog value                     | 16-bit, **low byte first**                            |  `B4 B4`   | 46260       |   ⚠️   |
+|  19   | Unknown                                  | `00` so far                                           |    `00`    |             |   ❓    |
+| 20-21 | Voltage-like reading A                   | 16-bit, V × 100 (assumed)                             |  `02 C4`   | 7.08        |   ❓    |
+| 22-23 | Voltage-like reading B                   | 16-bit, V × 100 (assumed)                             |  `02 A6`   | 6.78        |   ❓    |
+| 24-30 | Unused                                   | all `00` so far                                       |  `00 ...`  |             |   ❓    |
+| 31-32 | Checksum                                 | CRC-16/XMODEM                                         |  `AC 5E`   |             |   ✅    |
 
 ### Field notes
 
@@ -86,12 +86,16 @@ Status key: ✅ confirmed against the IP-100 · ⚠️ partly understood · ❓ 
 - **Wind direction (11-12):** confirmed 2026-10-25 by moving the tail: 337° → 135° → 157°, matching the IP-100 and updating live.
 - **Rain (13-14):** confirmed 2026-10-25. About 4 oz of water poured into the gauge: byte 13 went `E1` → `E9` (8 tips) and the IP-100 daily rain went 0.00 → 0.08 in. The Oracle YTD went 10.95 → 11.03 in (+0.08). So **0.01 in per tip**, which matches Rainwise's own spec for their rain gauge ([Rainwise rain gauge][rw-gauge]). Byte 14 always equals 255 − byte 13 (`E1`/`1E`, `E9`/`16`, `3D`/`C2`), a simple check byte. Tips show up in the next packet, within about 2 s.
 - **Rain counter wrap:** byte 13 is a running 8-bit count, not a daily or YTD total, and rolls over from 255 to 0. Rain amount = (new − old) mod 256 × 0.01 in. The station sends a packet every 2 s, so a wrap can't be missed in practice.
-- **Byte 15:** flips between `D8` and `D9` in step with the battery voltage (`D8` when battery is higher). Probably a raw analog reading, not a counter.
-- **Bytes 17-18:** read low byte first (`byte18 × 256 + byte17`) they form a smooth value around 45,500-46,000 that moves opposite to the battery voltage. Read high byte first, byte 17 looks like noise. Probably a raw ADC channel, possibly a reference voltage. Not wind gust: it only changes at the once-a-minute update and didn't react to the anemometer test.
-- **Bytes 22-23:** originally guessed as solar panel voltage. **Ruled out:** at night it still reads 6.74-7.07 V, always about 0.2-0.3 V below the battery and moving with it. Most likely a supply rail after a diode or regulator.
-- **Bytes 24-30:** always zero. Probably slots for sensors this station doesn't have (solar radiation, UV, extra probes).
+- **Byte 15 = IP-100 `station_volts` (confirmed 2026-10-26).** Over an 11-hour daytime log (669 minutes), every value of byte 15 matched exactly one `station_volts` value, and `V = 0.0291 × byte15 + 0.20`, rounded to 0.1 V, reproduced the IP-100 reading in all 669 minutes. It also gives 7.0 V for the 2024 sample (`EB` = 235), matching that XML. Several nearby slope/offset pairs (about 0.029-0.032 V per count) fit equally well, so the exact scale is still approximate; it works out to roughly 0.03 V per step, consistent with an 8-bit ADC reading the supply through a voltage divider ([SparkFun – voltage dividers][sparkfun-div]).
+- **Is byte 15 really a battery voltage?** It rose smoothly from 216 to 234 (6.5 → 7.0 V) as the day warmed from 31 to 41 °F and fell back in the evening. Correlation with outside temperature is 0.98 ([Pearson correlation][pearson]). That could be the battery charging from the solar panel during the day, or the reading drifting with temperature ([correlation vs. causation][corr-cause]).
+- **Sunlight comparison (2026-10-26): byte 15 does not follow sunlight on the panel.** The MK-III's panel faces true south, tilted 30° from vertical (60° from horizontal) for latitudes 22.5-55° N ([Rainwise MK-III User's Guide][rw-mk3]). A clear-sky model of sunlight on that panel (NOAA sun position + PVEducation direct-beam formula) peaks at solar noon, about 1:12 pm, but byte 15 peaked at 3:36 pm, together with air temperature. At 9:45 am the panel was already getting about half its peak sunlight while byte 15 hadn't moved from 216. Correlation with sunlight is only 0.34, against 0.98 with temperature, and after accounting for temperature what's left of byte 15 goes the *opposite* way to sunlight (−0.50). Conclusion: byte 15 is a voltage reading that drifts with temperature, not a sign of solar charging. Assumes a clear day and no shading of the panel.
+- **Battery:** the MK-III uses a 6 V 5 Ah AGM sealed lead-acid battery with a 0.6 W solar panel ([Rainwise MK-III User's Guide][rw-mk3]). A multimeter reading on the battery, compared with byte 15 at the same minute on a cold night and a warm afternoon, will show whether byte 15 is the battery voltage plus temperature drift.
+- **Byte 16:** `04` almost all the time. It switched to `05` (bit 0 set) for nine single minutes during the day, and every time bytes 20-21 and 22-23 had both dropped to about 6.5 V (average 6.50 / 6.49 V flagged vs. 7.04 / 7.01 V not flagged). Most likely a low-voltage warning bit. Not every reading that low was flagged, so the exact rule is unknown.
+- **Bytes 17-18:** read low byte first (`byte18 × 256 + byte17`) they form a value around 43,700-48,800 (11-hour log) that moves opposite to bytes 20-23 (correlation about −0.4). Read high byte first, byte 17 looks like noise. Probably a raw ADC channel, possibly a reference voltage. Not wind gust: it only changes at the once-a-minute update and didn't react to the anemometer test.
+- **Bytes 20-21 and 22-23:** originally labeled battery and second supply voltage because the first sample (7.08 V) happened to be close to the IP-100's 7.0 V. The daytime log shows the IP-100's value actually comes from byte 15. These two jump around a lot, 6.45-7.6 V with typical minute-to-minute changes of 0.2-0.26 V, far noisier than a real battery, and are not tied to temperature or time of day. They partly move together (correlation 0.53) and move opposite to bytes 17-18 (about −0.4). Possibly voltages measured under load (for example while the radio transmits) or raw charging-circuit readings. Not solar panel voltage: they read 6.7-7.1 V at night. Still unidentified.
+- **Bytes 19 and 24-30:** zero in every packet of the 11-hour log. Probably slots for sensors this station doesn't have (solar radiation, UV, extra probes).
 - **Pressure is station pressure.** The value in bytes 7-8 is the actual air pressure at the station, not corrected to sea level. At higher elevations it reads well below the ~30 inHg people expect. See [Sea-level pressure](#sea-level-pressure).
-- **IP-100 `station_volts`:** reported 6.5 V during the night capture, which doesn't directly match bytes 20-21 or 22-23. Don't use it as a reference until understood.
+- **IP-100 `station_volts`:** solved, it's byte 15 (see above).
 - **Header:** may contain a station ID or type. Can't test against a second station (the other Rainwise transmitter is not XBee).
 
 ### RAW samples
@@ -256,15 +260,20 @@ Only one program can open the serial port at a time. While testing on the PC, ru
 
 ## Test plan
 
-|                                                               Test                                                                | Status |                                 Result                                  |
-| --------------------------------------------------------------------------------------------------------------------------------- | :----: | ----------------------------------------------------------------------- |
-| Connectivity (port, self-test, live data, XML)                                                                                    |   ✅    | All passed 2026-10-25                                                   |
-| Night baseline capture                                                                                                            |   ✅    | Confirmed CRC, 1-minute update of slow fields, ruled out solar on 22-23 |
-| Rain: pour water in the gauge                                                                                                     |   ✅    | Byte 13 = tip counter, 0.01 in/tip; byte 14 = 255 − byte 13             |
-| Wind: spin the anemometer, move the tail                                                                                          |   ✅    | 09-10 and 11-12 confirmed, live; gust is calculated downstream          |
-| Daytime capture: compare 15, 17-18, 20-23 in sun vs. night                                                                        |   ⬜    |                                                                         |
-| Sea-level pressure: verify elevation with GPS, compare with nearest airport at :53 past the hour on several calm days, set offset |   ⬜    | First comparison ~0.07 inHg high                                        |
-| Receiver: check whether anything is ever sent back to the station (XBee DIN pin)                                                  |   ⬜    |                                                                         |
+|                                                                           Test                                                                            | Status |                                                   Result                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | :----: | ----------------------------------------------------------------------------------------------------------- |
+| Connectivity (port, self-test, live data, XML)                                                                                                            |   ✅    | All passed 2026-10-25                                                                                       |
+| Night baseline capture                                                                                                                                    |   ✅    | Confirmed CRC, 1-minute update of slow fields, ruled out solar on 22-23                                     |
+| Rain: pour water in the gauge                                                                                                                             |   ✅    | Byte 13 = tip counter, 0.01 in/tip; byte 14 = 255 − byte 13                                                 |
+| Wind: spin the anemometer, move the tail                                                                                                                  |   ✅    | 09-10 and 11-12 confirmed, live; gust is calculated downstream                                              |
+| Daytime capture: compare 15, 17-18, 20-23 in sun vs. night                                                                                                |   ✅    | 11 h log 2026-10-26: byte 15 = IP-100 station volts; byte 16 bit 0 = low-voltage flag?; 20-23 still unknown |
+| Sunlight model vs. byte 15 (panel true south, 60° tilt)                                                                                                   |   ✅    | Byte 15 follows temperature, not sunlight                                                                   |
+| Multimeter: measure station battery and solar panel, note the minute, compare with bytes 15, 20-21, 22-23 (cold night and warm afternoon)                 |   ⬜    |                                                                                                             |
+| Sea-level pressure: verify elevation with GPS, compare with nearest airport at :53 past the hour on several calm days, set offset                         |   ⬜    | First comparison ~0.07 inHg high                                                                            |
+| Receiver: check whether anything is ever sent back to the station (XBee DIN pin)                                                                          |   ⬜    |                                                                                                             |
+| XBee config: read both XBees in XCTU; confirm `AP` = 0 (transparent mode), note `BD` (baud), `D6`/`D7` (RTS/CTS flow control) and sleep settings          |   ⬜    |                                                                                                             |
+| Station side: tap the station XBee's DIN pin (pin 3) with a 3.3 V USB-serial adapter and confirm it carries the same 32-byte packets the receiver outputs |   ⬜    |                                                                                                             |
+| Receiver to display: capture the RS-485 link and compare with the XBee output (same bytes, or re-formatted?)                                              |   ⬜    |                                                                                                             |
 
 ## Receiver to Display Pinout
 
@@ -299,14 +308,30 @@ To identify: with a meter, look for a pair that sits at a steady few hundred mV 
 **Radio and serial**
 
 - [Digi – XBee 3 TP (module temperature) command][xbee-tp]: the XBee's built-in temperature sensor. It's read with an AT command and is not added to the data stream, which is why bytes 22-23 couldn't be XBee temperature.
+- [Digi – AP (API Enable) command][xbee-ap]: `AP` = 0 means transparent mode, where the XBee passes serial bytes through unchanged.
+- [Digi – Through-hole pinout][xbee-pins]: DOUT pin 2, DIN pin 3, CTS pin 12, RTS pin 16, SLEEP_RQ pin 9 (from the XBee S2C guide; XBee 3 through-hole modules use the same 20-pin layout).
 - [Digi – Transparent operating mode][xbee-transparent]: in transparent mode an XBee is a "serial line replacement", passing bytes through unchanged (this page is from the XBee 3 Cellular guide; the concept is the same on all XBee 3 modules).
 - [TI – The RS-485 Design Guide (SLLA272)][ti-485]: differential signaling, termination, failsafe biasing.
 - [Semtech forum – LoRa time-on-air calculation][lora-toa]: points to the airtime formula in the SX126x/SX1276 datasheets.
 - [TTN forum – Spreadsheet for LoRa airtime calculation][ttn-airtime]
 
+**Data analysis**
+
+- [Wikipedia – Pearson correlation coefficient][pearson]: the "correlation" numbers used above (−1 to +1).
+- [Mathwords – Correlation vs. causation][corr-cause]: why two things rising together (like byte 15 and temperature) doesn't prove one causes the other.
+- [SparkFun – Voltage dividers][sparkfun-div]: how a circuit scales a higher voltage down to what an ADC can read, which is where a "volts per count" scale comes from.
+
 **Hardware and software**
 
 - [Rainwise – Rain gauge][rw-gauge]: 0.01 in per tip.
+- [Rainwise – MK-III Weather Stations User's Guide][rw-mk3] (PDF): solar panel direction and tilt by latitude, battery spec.
+
+**Sun position and sunlight**
+
+- [NOAA – General Solar Position Calculations][noaa-sun] (PDF): sun position, equation of time, declination.
+- [PVEducation – Intensity at sea level][pve-beam]: clear-sky direct beam formula.
+- [PVEducation – Air mass][pve-am]
+- [Sandia PVPMC – Basic solar position models][pvpmc-sun]
 - [TrueNAS – Installing custom apps][truenas-apps]: the Install via YAML steps.
 
 [nws-alt]: https://www.weather.gov/media/epz/wxcalc/altimeterSetting.pdf
@@ -317,9 +342,19 @@ To identify: with a meter, look for a pair that sits at a steady few hundred mV 
 [crc-cat]: https://reveng.sourceforge.io/crc-catalogue/16.htm
 [crc-legend]: https://reveng.sourceforge.io/crc-catalogue/legend.htm
 [xbee-tp]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_tp.htm
+[xbee-ap]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_ap.htm
+[xbee-pins]: https://docs.digi.com/resources/documentation/digidocs/90001506/reference/r_pinouts_th_smt_s2c.htm
 [xbee-transparent]: https://docs.digi.com/resources/documentation/digidocs/90002258/concepts/c_mode_transparent.htm
 [ti-485]: https://www.ti.com/document-viewer/lit/html/SLLA272D/GUID-46CBB394-E1DD-47D0-B4E2-118DFF92B3BB
 [lora-toa]: https://forum.lora-developers.semtech.com/t/sx126x-time-on-air-calculation/127
 [ttn-airtime]: https://www.thethingsnetwork.org/forum/t/spreadsheet-for-lora-airtime-calculation/1190
 [rw-gauge]: https://rainwise.com/wired-rain-gauge
 [truenas-apps]: https://apps.truenas.com/managing-apps/installing-custom-apps/
+[pearson]: https://en.wikipedia.org/wiki/Pearson_correlation_coefficient
+[rw-mk3]: https://rainwise.com/mwdownloads/download/link/id/385
+[noaa-sun]: https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+[pve-beam]: https://www.pveducation.org/equations/intensity-sea-level
+[pve-am]: https://www.pveducation.org/pvcdrom/properties-of-sunlight/air-mass
+[pvpmc-sun]: https://pvpmc.sandia.gov/modeling-guide/1-weather-design-inputs/sun-position/basic-solar-position-models/
+[corr-cause]: https://www.mathwords.com/c/correlation_vs_causation.htm
+[sparkfun-div]: https://learn.sparkfun.com/tutorials/voltage-dividers/all
