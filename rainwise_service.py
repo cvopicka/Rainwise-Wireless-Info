@@ -97,12 +97,14 @@ def decode(p: bytes) -> dict:
         "wind_dir_deg": u16(p, 10),  # 11-12
         "rain_count": p[12],  # 13 tip counter, 0.01 in/tip, wraps at 256
         "rain_chk_ok": int(p[12] + p[13] == 0xFF),  # 14 = 255 - byte 13
-        "b15": p[14],  # 15 flips with battery
-        "b16": p[15],  # 16 constant 04
+        "station_v": round(0.0291 * p[14] + 0.20, 2),  # 15 = IP-100 station_volts
+        "low_v_flag": p[15] & 0x01,  # 16 bit 0, low-voltage flag?
+        "b15": p[14],  # 15 raw
+        "b16": p[15],  # 16 raw (04 / 05)
         "b17_18_le": p[16] | (p[17] << 8),  # 17-18 16-bit LOW byte first
         "b19": p[18],  # 19
-        "batt_v": u16(p, 19) / 100,  # 20-21
-        "supply2_v": u16(p, 21) / 100,  # 22-23 2nd voltage, not solar
+        "v20_21": u16(p, 19) / 100,  # 20-21 voltage-like, noisy
+        "v22_23": u16(p, 21) / 100,  # 22-23 voltage-like, noisy
         "b24_30_hex": p[23:30].hex(" ").upper(),  # 24-30 unused sensors?
     }
 

@@ -96,14 +96,18 @@ def decode(pkt: bytes) -> dict:
         "baro_sl_inhg": sea_level_inhg(u16(pkt, 6) / 1000, ELEVATION_FT, BARO_OFFSET),
         "wind_mph": u16(pkt, 8) / 10,  # bytes 9-10
         "wind_dir_deg": u16(pkt, 10),  # bytes 11-12
-        "batt_v": u16(pkt, 19) / 100,  # bytes 20-21
-        "supply2_v": u16(pkt, 21)
-        / 100,  # bytes 22-23 (2nd voltage, tracks battery; NOT solar)
-        # --- unknowns, logged several ways so patterns stand out ---
+        "station_v": round(
+            0.0291 * pkt[14] + 0.20, 2
+        ),  # byte 15: what the IP-100 shows as station_volts
+        "low_v_flag": pkt[15]
+        & 0x01,  # byte 16 bit 0: set when 20-21 and 22-23 drop to ~6.5 V
         "rain_count": pkt[12],  # byte 13: tip counter, 0.01 in/tip, wraps at 256
         "rain_chk_ok": pkt[12] + pkt[13] == 0xFF,  # byte 14 = 255 - byte 13
-        "b15": pkt[14],  # D8/D9, flips with battery
-        "b16": pkt[15],  # constant 04
+        # --- not yet identified, logged raw ---
+        "v20_21": u16(pkt, 19) / 100,  # bytes 20-21: voltage-like, noisy (was "batt_v")
+        "v22_23": u16(pkt, 21) / 100,  # bytes 22-23: voltage-like, noisy
+        "b15": pkt[14],
+        "b16": pkt[15],
         "b17_18_le": pkt[16]
         | (pkt[17] << 8),  # 16-bit, LOW byte first; inverse of battery
         "b19": pkt[18],
@@ -216,7 +220,8 @@ def run(args):
                     line = (
                         f"{now}  T={d['temp_f']:.1f}F  RH={d['humidity_pct']}%  "
                         f"P={d['baro_inhg']:.3f} (SL {d['baro_sl_inhg']})  W={d['wind_mph']:.1f}@{d['wind_dir_deg']}  "
-                        f"B={d['batt_v']:.2f}V  V2={d['supply2_v']:.2f}V  "
+                        f"Vstn={d['station_v']:.2f}  V20={d['v20_21']:.2f}  V22={d['v22_23']:.2f}  "
+                        f"low={d['low_v_flag']}  "
                         f"rain#={d['rain_count']}  15={d['b15']}  17-18le={d['b17_18_le']}"
                     )
                     if not args.no_xml:
