@@ -1,6 +1,6 @@
 # LoRa link firmware (RAK4631)
 
-Firmware for the XBee replacement planned in the main README ([LoRa replacement plan](../README.md#lora-replacement-plan)). One sketch, two roles:
+Firmware for the XBee replacement planned in [docs/hardware.md](../docs/hardware.md#lora-replacement-plan). One sketch, two roles:
 
 - **Station:** reads the station's 32-byte packets at 9600 8N1 on UART1, checks header and CRC, and transmits each valid packet unchanged.
 - **Receiver:** receives LoRa packets, checks length, header and CRC, and writes the 32 raw bytes to USB and to UART1 at 9600 8N1. That's the same byte stream an XBee in transparent mode (`AP` = 0) delivers, so `rainwise_logger.py` and the NAS service can read it as is.

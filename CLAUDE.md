@@ -1,12 +1,12 @@
 # Rainwise MK-III-LR wireless project
 
-Decoding and replacing the XBee radio link of a Rainwise MK-III-LR weather station (Oracle display, IP-100 network interface), and logging the data locally. README.md is the full write-up: byte map, test results, XBee settings, LoRa plan, wiring diagrams and references. Read it before changing anything.
+Decoding and replacing the XBee radio link of a Rainwise MK-III-LR weather station (Oracle display, IP-100 network interface), and logging the data locally. README.md has the overview, byte map, tools and test plan; docs/protocol.md has the evidence for each field, raw samples and the sea-level pressure formula; docs/hardware.md has XBee settings, the display link, the LoRa plan and wiring diagrams. Read them before changing anything. Each doc keeps its own reference-style "References" section for what it cites.
 
 Private, machine-specific details (IP addresses, elevation, location, radio network ID) are in `CLAUDE.local.md`, which is gitignored. Never copy them into README.md, code defaults, or anything committed.
 
 ## Working style (owner's standing preferences)
 
-- **Always include references/sources** for explanations, formulas, specs and design choices (README "References" section uses reference-style Markdown links). The owner wants to learn from them.
+- **Always include references/sources** for explanations, formulas, specs and design choices (each doc's "References" section uses reference-style Markdown links). The owner wants to learn from them.
 - Verify facts from datasheets and official docs; mark anything unconfirmed as **verify** rather than stating it as fact (e.g. the RJ11 link type is NOT confirmed as RS-485).
 - Keep the public repo clean: run a privacy scan (grep for the values in CLAUDE.local.md) before suggesting a commit.
 - Prefer standard off-the-shelf boards; no custom PCBs.
@@ -15,17 +15,19 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 
 | Path | What |
 | --- | --- |
-| `README.md` | Main documentation (public) |
+| `README.md` | Overview, byte map, tools, test plan (public) |
+| `docs/protocol.md` | Field notes / evidence per byte, raw samples, XML snapshot, sea-level pressure |
+| `docs/hardware.md` | XBee config, RJ11 display link, LoRa plan and options, wiring diagrams, FCC notes |
 | `rainwise_logger.py` | PC test logger: XBee serial -> CSV, CRC check, decode, polls IP-100 XML. `--test` runs a self-test |
 | `rainwise/rainwise_service.py` | Long-term logger for TrueNAS (Docker): serial + UDP 5005 + IP-100 XML -> SQLite, stores raw hex |
 | `rainwise/docker-compose.yml` | TrueNAS custom app (public copy uses placeholders) |
 | `solar/solar_model.py` | Clear-sky sun model (NOAA + PVEducation formulas); location via SOLAR_LAT/LON/TZ env vars |
-| `diagrams/*.mmd`, `*.png` | Mermaid source + rendered wiring diagrams (also embedded in README) |
+| `diagrams/*.mmd`, `*.png` | Mermaid source + rendered wiring diagrams (also embedded in docs/hardware.md) |
 | `lora/` | RAK4631 RadioLib firmware, PlatformIO project (`pio run -e station` / `-e receiver`), RAK board files in `lora/rakwireless/`, bench replay script; its own README |
 
 Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sample decode).
 
-## Protocol summary (details in README)
+## Protocol summary (details in README and docs/protocol.md)
 
 - 9600 8N1, 32-byte packets, header `33 80 00`, CRC-16/XMODEM over bytes 1-30 stored big-endian in 31-32.
 - Packet every ~2 s; wind speed/direction and rain are live, temp/humidity/pressure/voltages update once a minute.
@@ -49,7 +51,7 @@ Replace the station transmitter and every receiver with RAKwireless RAK4631 (US9
 
 1. Read the **station** XBee in XCTU (read only): function set, AP, D7, RO, MY, DL. Don't write settings or update firmware.
 2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one).
-3. Identify the Oracle black box -> display RJ11 link (power, RS-485, RS-232 or TTL) with a meter, then capture it. Table in README "Identifying the link with a meter".
+3. Identify the Oracle black box -> display RJ11 link (power, RS-485, RS-232 or TTL) with a meter, then capture it. Table in docs/hardware.md "Identifying the link with a meter".
 4. Measure the IP-100 RJ11 port (nothing plugged in); only plug the black box in if pinouts match. Check whether the IP-100's internal radio is a socketed XBee.
 5. Station-side DIN tap (pin 3) with a logic analyzer, optional if station AP=0.
 6. Calibrate sea-level pressure offset against the nearest airport METAR at :53 on calm days; confirm elevation with GPS.
