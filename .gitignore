@@ -10,3 +10,9 @@ __pycache__/
 
 # Local reports
 *.html
+
+/Tools
+
+# Private Claude Code notes (location, IPs, radio IDs)
+CLAUDE.local.md
+XBeeModInfo.md
