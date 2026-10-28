@@ -1,0 +1,26 @@
+flowchart LR
+  subgraph PWR["Station power"]
+    BAT["6 V 5 Ah SLA battery<br/>+ 0.6 W solar"]
+    BUCK["Buck converter<br/>6-7.5 V in, 5 V out"]
+    BAT --> BUCK
+  end
+  subgraph SOCK["Station board XBee socket<br/>SparkFun BOB-08276 + 2 mm male headers"]
+    P3["Pin 3 DIN<br/>station data OUT"]
+    P10["Pin 10 GND"]
+    P12["Pin 12 CTS<br/>hold at 'ready' (verify)"]
+    P1["Pin 1 VCC 3.3 V<br/>leave unconnected"]
+    P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
+  end
+  subgraph RAK["RAK4631 on RAK19003"]
+    RX1["J7 pin 1 RX1"]
+    GND["J7 GND"]
+    GPIO["spare GPIO<br/>(drives CTS low)"]
+    VBUS["USB-C / VBUS 5 V"]
+    ANT["IPEX - SMA pigtail"]
+  end
+  P3 --> RX1
+  P10 --- GND
+  GPIO --> P12
+  BUCK -- "5 V" --> VBUS
+  BUCK -- "0 V" --- GND
+  ANT --> OUT["Outdoor 915 MHz antenna"]

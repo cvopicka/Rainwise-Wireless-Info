@@ -1,0 +1,22 @@
+flowchart LR
+  ADP["Existing 9 V adapter"] --> BUCK["Buck converter<br/>9 V to 5 V"]
+  subgraph RAK["RAK4631 + RAK19003 (RECEIVE)"]
+    VBUS["USB-C / VBUS 5 V"]
+    TX1["J7 pin 2 TX1"]
+    V33["J6 pin 1 3.3 V out"]
+    G["GND"]
+  end
+  BUCK --> VBUS
+  subgraph M485["Line driver, type TBD (RS-485 shown)"]
+    DI["DI (data in)"]
+    DERE["DE + /RE tied high<br/>(always transmit)"]
+    VCC["VCC 3.3 V"]
+    MG["GND"]
+    AB["A / B"]
+  end
+  TX1 --> DI
+  V33 --> VCC
+  V33 --> DERE
+  G --- MG
+  AB -- "RJ11 pins and signal type:<br/>MEASURE the existing black box first" --> ORACLE["Oracle display"]
+  MG -- "RJ11 ground (verify)" --- ORACLE

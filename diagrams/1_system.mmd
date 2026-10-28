@@ -1,0 +1,14 @@
+flowchart LR
+  subgraph STATION["Outdoor station (MK-III)"]
+    MCU["Station controller<br/>32-byte packet every 2 s<br/>9600 8N1"]
+    TX["RAK4631 + RAK19003<br/>role: TRANSMIT"]
+    MCU -- "UART via XBee socket" --> TX
+  end
+  TX -. "LoRa 915 MHz<br/>broadcast" .-> RX1
+  TX -. "LoRa" .-> RX2
+  TX -. "LoRa" .-> RX3
+  subgraph HOUSE["House"]
+    RX1["RAK receiver<br/>Oracle box"] -- "UNKNOWN serial link<br/>RS-485? RS-232? TTL?<br/>RJ11, 4 wires (measure)" --> ORACLE["Oracle display"]
+    RX2["RAK receiver<br/>IP-100"] -- "RJ11 port or internal<br/>radio socket (verify)" --> IP100["IP-100"]
+    RX3["RAK receiver<br/>NAS"] -- "USB serial<br/>power + data" --> NAS["TrueNAS<br/>rainwise logger"]
+  end

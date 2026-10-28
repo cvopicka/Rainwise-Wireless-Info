@@ -1,0 +1,4 @@
+flowchart LR
+  RAK["RAK4631 on RAK19003<br/>role: RECEIVE<br/>forwards 32-byte packets on USB serial"] -- "USB-C cable<br/>power + data" --> NAS["TrueNAS host<br/>/dev/ttyACM0 (verify name)"]
+  NAS --> SVC["rainwise_service.py<br/>SERIAL_PORT = USB device<br/>CRC check, decode"]
+  SVC --> DB[("rainwise.db<br/>SQLite")]
