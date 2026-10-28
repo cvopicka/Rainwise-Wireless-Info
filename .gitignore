@@ -8,6 +8,10 @@ __pycache__/
 *.pyc
 .venv/
 
+# PlatformIO build output and generated editor config
+lora/.pio/
+lora/.vscode/
+
 # Local reports
 *.html
 
@@ -16,3 +20,5 @@ __pycache__/
 # Private Claude Code notes (location, IPs, radio IDs)
 CLAUDE.local.md
 XBeeModInfo.md
+Rainwise MK3-LR data stream - Claude.pdf
+*.code-workspace

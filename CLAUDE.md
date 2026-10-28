@@ -21,6 +21,7 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 | `rainwise/docker-compose.yml` | TrueNAS custom app (public copy uses placeholders) |
 | `solar/solar_model.py` | Clear-sky sun model (NOAA + PVEducation formulas); location via SOLAR_LAT/LON/TZ env vars |
 | `diagrams/*.mmd`, `*.png` | Mermaid source + rendered wiring diagrams (also embedded in README) |
+| `lora/` | RAK4631 RadioLib firmware, PlatformIO project (`pio run -e station` / `-e receiver`), RAK board files in `lora/rakwireless/`, bench replay script; its own README |
 
 Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sample decode).
 
@@ -52,5 +53,5 @@ Replace the station transmitter and every receiver with RAKwireless RAK4631 (US9
 4. Measure the IP-100 RJ11 port (nothing plugged in); only plug the black box in if pinouts match. Check whether the IP-100's internal radio is a socketed XBee.
 5. Station-side DIN tap (pin 3) with a logic analyzer, optional if station AP=0.
 6. Calibrate sea-level pressure offset against the nearest airport METAR at :53 on calm days; confirm elevation with GPS.
-7. Write RadioLib firmware (transmit and receive roles) and bench-test with two RAK kits.
+7. RadioLib firmware written and compiled (`lora/`); bench-test with the four RAK kits (bench steps in lora/README.md).
 8. Update the NAS service for the RAK USB receiver (should work as a serial port already).

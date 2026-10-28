@@ -258,6 +258,10 @@ Inputs: XBee on USB serial, UDP port 5005 (for the future LoRa receiver, one 32-
 
 Only one program can open the serial port at a time. While testing on the PC, run the container with `SERIAL_PORT: ""` so it still logs the XML.
 
+### `lora/` (RAK4631 firmware)
+
+RadioLib sketch for the XBee replacement, with a station role (UART in, LoRa out) and a receiver role (LoRa in, raw 32-byte packets out on USB and UART1). A PlatformIO project (`lora/platformio.ini`) with `station` and `receiver` environments, built and flashed from VS Code. Radio settings, pins, setup and the bench test are in [lora/README.md](lora/README.md).
+
 ## Test plan
 
 |                                                                           Test                                                                            | Status |                                                   Result                                                    |
