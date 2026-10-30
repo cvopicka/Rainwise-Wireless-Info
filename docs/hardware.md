@@ -29,7 +29,7 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
 **What the station settings mean for the LoRa replacement:**
 
 - **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
-- **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware can mimic this (`SLEEP_RQ_PIN`, `CTS_PIN`, `ON_SLEEP_PIN` in the sketch), but which of these lines the controller actually watches needs the logic-analyzer tap on pins 3, 9, 12 and 13 (**verify**). Digi's `D8` (SLEEP_RQ pin function) and `D9` (ON/SLEEP) settings on the station XBee would also help; they weren't recorded.
+- **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). Digi's `D8` (SLEEP_RQ pin function) and `D9` (ON/SLEEP) settings on the station XBee would also help; they weren't recorded.
 
 ## Receiver to Display Pinout
 
@@ -142,7 +142,7 @@ flowchart LR
   end
 ```
 
-**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so spare RAK GPIOs can stand in for the XBee's handshake: CTS (pin 12) low when ready, optionally following SLEEP_RQ (pin 9) and driving ON/SLEEP (pin 13). Dashed lines are only needed if the logic-analyzer tap shows the controller uses them (verify). Which RAK19003 header pins are free GPIOs is still to be checked against the [RAK19003 datasheet][rak19003] (verify).
+**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so the RAK stands in for the XBee's handshake: it reads SLEEP_RQ (pin 9) and drives CTS (pin 12) the way the XBee did. The RAK19003 brings out only two 2.54 mm headers, J6 (3.3 V, GND, SDA, SCL) and J7 (RX1, TX1, GND, BOOT); its other IO pins are on board-to-board connectors ([RAK19003 datasheet][rak19003]). I2C isn't used, so J6's SDA and SCL serve as the two handshake pins. The CTS behaviour can be changed over the air if the controller turns out to expect something else (verify; see [lora/README.md](../lora/README.md#status-messages-and-remote-commands)), and the whole assembly is wired and tested indoors so the ladder part is a module swap ([station install](../lora/README.md#station-install-one-trip)).
 
 ```mermaid
 flowchart LR
@@ -154,24 +154,24 @@ flowchart LR
   subgraph SOCK["Station board XBee socket<br/>SparkFun BOB-08276 + 2 mm male headers"]
     P3["Pin 3 DIN<br/>station data OUT, 115200 8N1"]
     P10["Pin 10 GND"]
-    P9["Pin 9 SLEEP_RQ<br/>from station controller (optional, verify)"]
-    P12["Pin 12 CTS<br/>low = ready (verify)"]
-    P13["Pin 13 ON/SLEEP<br/>high = awake (optional, verify)"]
+    P9["Pin 9 SLEEP_RQ<br/>from station controller"]
+    P12["Pin 12 CTS<br/>low = ready; mode set over the air"]
+    P13["Pin 13 ON/SLEEP<br/>not wired (add only if needed)"]
     P1["Pin 1 VCC 3.3 V<br/>leave unconnected"]
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
   subgraph RAK["RAK4631 on RAK19003"]
     RX1["J7 pin 1 RX1"]
     GND["J7 GND"]
-    GPIO["spare GPIOs<br/>SLEEP_RQ in, CTS + ON/SLEEP out"]
+    SDA["J6 SDA (pin 13)<br/>SLEEP_RQ in"]
+    SCL["J6 SCL (pin 14)<br/>CTS out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
   P3 --> RX1
   P10 --- GND
-  P9 -.-> GPIO
-  GPIO --> P12
-  GPIO -.-> P13
+  P9 --> SDA
+  SCL --> P12
   BUCK -- "5 V" --> VBUS
   BUCK -- "0 V" --- GND
   ANT --> OUT["Outdoor 915 MHz antenna"]

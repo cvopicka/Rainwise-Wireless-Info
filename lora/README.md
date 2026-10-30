@@ -2,17 +2,18 @@
 
 Firmware for the XBee replacement planned in [docs/hardware.md](../docs/hardware.md#lora-replacement-plan). One sketch, two roles:
 
-- **Station:** reads the station's 32-byte packets at **115200** 8N1 on UART1 (the station XBee's `BD` = 7; see [XBee configuration](../docs/hardware.md#xbee-configuration)), checks header and CRC, and transmits each valid packet unchanged. It can also stand in for the XBee's pin-sleep handshake lines.
+- **Station:** reads the station's 32-byte packets at **115200** 8N1 on UART1 (the station XBee's `BD` = 7; see [XBee configuration](../docs/hardware.md#xbee-configuration)), checks header and CRC, and transmits each valid packet unchanged. It stands in for the XBee's pin-sleep handshake (CTS follows SLEEP_RQ), reports its own health over the air once a minute, and accepts handshake-mode changes over the air, so a wrong guess about the station's controller doesn't mean another ladder trip.
 - **Receiver:** receives LoRa packets, checks length, header and CRC, and writes the 32 raw bytes to USB and to UART1 at 9600 8N1. That's the same byte stream an XBee in transparent mode (`AP` = 0) delivers, so `rainwise_logger.py` and the NAS service can read it as is.
 
 | File | What |
 | --- | --- |
 | `platformio.ini` | PlatformIO project: `station` and `receiver` environments, RadioLib version pinned |
-| `rainwise_lora/rainwise_lora.ino` | The sketch. Board pins and radio settings are in blocks at the top |
+| `rainwise_lora/rainwise_lora.cpp` | The sketch (plain C++ rather than `.ino`, so PlatformIO doesn't have to generate declarations). Board pins and radio settings are in blocks at the top |
+| `rainwise_lora/local_config.h.example` | Template for `local_config.h` (gitignored), which holds the private remote-command key |
 | `rakwireless/` | RAK4631 board definition and variant files from RAK's RAK_PATCH_V2 ([RAK WisBlock PlatformIO guide][rak-pio]), unchanged. The variant files are LGPL-2.1 (inherited from the Arduino and Adafruit cores); see their headers |
 | `replay_packets.py` | Bench test: sends packets from a logger CSV to a station-role board over USB |
 
-Status: builds clean for both roles with PlatformIO (nordicnrf52 11.0.0, Adafruit nRF52 framework 1.7.0, RadioLib 7.8.1) and with arduino-cli (RAK nRF52 core 1.3.3). The CRC and framing code was tested on a PC against all 19,235 packets in a logged CSV, with junk bytes inserted and 1 % of the packets corrupted: every good packet was found and every corrupted one rejected. **Not yet run on hardware.**
+Status: builds clean for both roles with PlatformIO (nordicnrf52 11.0.0, Adafruit nRF52 framework 1.7.0, RadioLib 7.8.1); an earlier version also built with arduino-cli (RAK nRF52 core 1.3.3). The CRC and framing code was tested on a PC against all 19,235 packets in a logged CSV, with junk bytes inserted and 1 % of the packets corrupted: every good packet was found and every corrupted one rejected. The status and command message encoding was also tested on a PC (round trip, corrupted message rejected, never mistaken for a weather packet). **Not yet run on hardware.**
 
 ## Radio settings
 
@@ -40,7 +41,7 @@ Every board must use the same values ([RadioLib][radiolib-sx1262]).
 
 Receiver sensitivity improves about 2.5 dB per SF step. Widening from 125 to 500 kHz costs about 6 dB (10·log10(4)), because the noise floor rises with bandwidth ([Semtech AN1200.22, LoRa Modulation Basics][an1200-22]). Pick the lowest SF that holds the link at the station's distance with margin; the range test below decides it. More airtime also means more transmit current at the station: at SF12 the transmitter is on 20 % of the time.
 
-**Security:** like the XBee link today (`EE` = 0), packets are not encrypted or authenticated. The CRC catches errors, not forgeries.
+**Security:** like the XBee link today (`EE` = 0), packets are not encrypted or authenticated. The CRC catches errors, not forgeries. Remote commands must carry a 32-bit key from `local_config.h`, which keeps the public code from controlling your station; the key is sent in the clear, so someone recording the link could replay it. The worst a command can do is change how CTS behaves, which could stop the station's data until it's set back.
 
 ## Board pins (RAK4631)
 
@@ -53,11 +54,40 @@ From RAK's core ([RAK-nRF52-Arduino][rak-core], `variants/WisCore_RAK4631_Board/
 | RF switch power | 37 | Driven HIGH; DIO2 switches TX/RX |
 | TCXO | 1.8 V from DIO3 | |
 | UART1 RX1 / TX1 | 15 / 16 | RAK19003 header J7 ([RAK19003 datasheet][rak19003]) |
+| Station SLEEP_RQ in / CTS out | 13 / 14 | RAK19003 header J6 SDA / SCL, used as plain GPIO (I2C isn't used). The RAK19003's other IO pins are only on its board-to-board connectors ([RAK19003 datasheet][rak19003]) |
 | Green LED | 35 | Blinks once per packet; fast blink = radio failed to start |
 
 UART1 runs at `STATION_UART_BAUD` (115200) in the station role and `RECEIVER_UART_BAUD` (9600) in the receiver role.
 
-**Station handshake pins** (all -1, off, by default). The station XBee uses pin sleep (`SM` = 1): SLEEP_RQ (socket pin 9) high = sleep, low = awake, and the XBee answers with CTS (pin 12) low and ON/SLEEP (pin 13) high when ready ([Digi pin sleep][xbee-pinsleep]). Set `SLEEP_RQ_PIN`, `CTS_PIN` and `ON_SLEEP_PIN` to free RAK19003 GPIOs to copy that behaviour; with only `CTS_PIN` set, CTS is held low (always ready). Which lines the station controller actually uses needs the logic-analyzer tap on pins 3, 9, 12 and 13 (**verify**). The LED blink is non-blocking so the 64-byte UART receive buffer can't overflow at 115200.
+**Station handshake.** The station XBee uses pin sleep (`SM` = 1): SLEEP_RQ (socket pin 9) high = sleep, low = awake, and the XBee answers with CTS (pin 12) low when ready ([Digi pin sleep][xbee-pinsleep]). The station role reads SLEEP_RQ on J6 SDA and drives CTS on J6 SCL. SLEEP_RQ has a pull-up, like the XBee's own inputs. Three modes, changeable over the air and remembered across power cycles (stored in the nRF52's internal flash):
+
+| Mode | Key | CTS | Use when |
+| --- | --- | --- | --- |
+| mirror (default) | `0` | Low while SLEEP_RQ is low (awake), high while asleep, exactly like the XBee | Normal; matches what the controller saw before |
+| cts-low | `1` | Always low (always ready) | SLEEP_RQ never changes (controller doesn't drive it, or the wire is off) but the controller waits for CTS |
+| released | `2` | Not driven, as if unconnected | The controller doesn't seem to care about CTS, or to rule CTS out |
+
+Which lines the controller really uses is unconfirmed (**verify**); the status message shows it. The XBee's ON/SLEEP output (pin 13) isn't wired by default (`ON_SLEEP_PIN` = -1). The LED blink is non-blocking so the 64-byte UART receive buffer can't overflow at 115200.
+
+## Status messages and remote commands
+
+The station sends a 31-byte status message (header `RWS`) at startup, every 60 s, and right after any command. It goes out between weather packets and never reaches the display or the logger: receivers forward only valid 32-byte `33 80 00` packets. In text mode (`d`) a receiver prints it like this:
+
+```
+status: up 3600 s, handshake mirror, SLEEP_RQ high (asleep), CTS high, wakes 30 (avg 9 ms, max 12 ms),
+weather packets 1800, UART bytes 57600, TX errors 0, dropped 0, commands on, last command 4 | rssi -71 snr 9.5
+```
+
+How to read it:
+
+- **wakes about 30 per minute** with a short awake time: the controller drives SLEEP_RQ for every packet, so mirror mode is right.
+- **wakes 0 and SLEEP_RQ high** while **weather packets** stay at 0: the controller isn't waking the radio, or the SLEEP_RQ wire is loose. With CTS held high the controller may be waiting; try `1` (cts-low).
+- **UART bytes rising but weather packets not**: data arrives but doesn't frame, e.g. wrong baud rate.
+- **Weather packets rising**: the link works; the receivers are getting data.
+
+Commands, typed in a receiver's text mode: `0` / `1` / `2` set the handshake mode, `s` asks for status now. The receiver sends the command just after it next hears the station (the station listens between its own transmissions), and the station's reply shows the new mode and the command's sequence number under "last command". If nothing confirms it within a minute, type it again.
+
+Both boards need the same key in `rainwise_lora/local_config.h` (copy `local_config.h.example`; generate a key with `python3 -c "import secrets; print(hex(secrets.randbits(32)))"`). Without the file, the station ignores commands and receivers refuse to send them; the status message says "commands OFF".
 
 ## Building and flashing (PlatformIO in VS Code)
 
@@ -73,6 +103,7 @@ PlatformIO downloads the compiler, the Adafruit nRF52 framework, the upload tool
    ```
    `pio device list` shows the board's port, usually `/dev/ttyACM0`. Add `--upload-port` if several boards are plugged in. Upload resets the board into its bootloader automatically ("1200 bps touch"). If that fails, double-press the reset button and try again.
 3. For the replay script: `pip install pyserial` ([pyserial][pyserial]).
+4. For remote commands: create `rainwise_lora/local_config.h` from the example (see above) before building. Every board needs the same file.
 
 Uploading replaces Meshtastic but keeps RAK's bootloader. To go back, drag the Meshtastic UF2 onto the board's USB drive ([RAK4631 Quick Start][rak4631-qs]).
 
@@ -85,7 +116,26 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 3. **Several receivers.** R2 and R3 should count the same packets as R1 at the same time.
 4. **UART1 output.** Connect a 3.3 V USB-serial adapter to R1's TX1 and GND, open it at 9600 8N1, and check that the same 32-byte packets come out. This is the output that will feed the Oracle line driver or a local XBee.
 5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. A receiver-configured XBee outputs at **9600**, so build S with `STATION_UART_BAUD` set to 9600 for this test. Check that both sides are 3.3 V logic first (**verify**).
-6. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
+6. **Status and commands, no station needed.** With S running and R1 in text mode, a status line should appear every minute (`SLEEP_RQ high (asleep)` with nothing connected, because of the pull-up). Briefly connect S's J6 SDA to GND with a jumper: SLEEP_RQ shows `low (awake)`, and removing the jumper counts one wake. Type `1`, `2`, `0` on R1 and check that each reply shows the new mode and command number; measure J6 SCL (CTS) with the VTVM: low in cts-low, floating in released, following SDA in mirror. Power-cycle S and check that the mode was remembered.
+7. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
+
+## Station install (one trip)
+
+Everything fiddly happens indoors; the ladder part is a swap and a plug.
+
+**Indoors, beforehand:**
+1. Solder 2.54 mm header pins or wires to the RAK19003's J6 and J7, and the 2 mm male headers to the SparkFun XBee breakout (both are small parts; use good light and a magnifier).
+2. Wire the breakout to the RAK19003: pin 3 (DIN) to J7 RX1, pin 10 (GND) to J7 GND, pin 9 (SLEEP_RQ) to J6 SDA, pin 12 (CTS) to J6 SCL. Leave the breakout's pin 1 (3.3 V) unconnected. Label each wire.
+3. Wire the 5 V buck converter's output to the RAK's USB-C (a cut USB cable) or VBUS, and set its output to 5 V with the meter before connecting.
+4. Flash the station role and run bench step 6 with this exact assembly. Put it in its enclosure with the antenna attached.
+
+**At the station:**
+1. Station power off. Pull the original XBee out of its socket and keep it (it's the fallback).
+2. Push the breakout's headers into the XBee socket, same orientation as the XBee (pin 1 to pin 1).
+3. Connect the buck converter to the battery. Station power on.
+4. Watch the RAK's green LED: one short blink every 2 s means packets are flowing. No blinks: go back indoors and check the status messages on a receiver; change the handshake mode from there if needed. Fast continuous blinking means the radio failed to start.
+
+If anything is wrong and can't be fixed from indoors, the fallback is to put the original XBee back.
 
 ## References
 
