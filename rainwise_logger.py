@@ -183,13 +183,22 @@ def run(args):
     )
     framer = Framer()
     prev = None
-    new_file = not os.path.exists(args.out)
-
     fields = (
         ["pc_time", "raw_hex", "changed_bytes"]
         + list(decode(SAMPLE).keys())
         + ([] if args.no_xml else list(XML_FIELDS.keys()))
     )
+
+    # Appending rows under a different header would shift every column, so
+    # start a new file if the existing one was written by another version.
+    if os.path.exists(args.out):
+        with open(args.out, newline="") as f:
+            old_header = next(csv.reader(f), None)
+        if old_header and old_header != fields:
+            root, ext = os.path.splitext(args.out)
+            args.out = f"{root}-{dt.datetime.now():%Y%m%d-%H%M%S}{ext}"
+            print(f"Existing log has different columns; writing to {args.out}")
+    new_file = not os.path.exists(args.out)
 
     with open(args.out, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
