@@ -5,22 +5,26 @@ flowchart LR
     BAT --> BUCK
   end
   subgraph SOCK["Station board XBee socket<br/>SparkFun BOB-08276 + 2 mm male headers"]
-    P3["Pin 3 DIN<br/>station data OUT"]
+    P3["Pin 3 DIN<br/>station data OUT, 115200 8N1"]
     P10["Pin 10 GND"]
-    P12["Pin 12 CTS<br/>hold at 'ready' (verify)"]
+    P9["Pin 9 SLEEP_RQ<br/>from station controller (optional, verify)"]
+    P12["Pin 12 CTS<br/>low = ready (verify)"]
+    P13["Pin 13 ON/SLEEP<br/>high = awake (optional, verify)"]
     P1["Pin 1 VCC 3.3 V<br/>leave unconnected"]
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
   subgraph RAK["RAK4631 on RAK19003"]
     RX1["J7 pin 1 RX1"]
     GND["J7 GND"]
-    GPIO["spare GPIO<br/>(drives CTS low)"]
+    GPIO["spare GPIOs<br/>SLEEP_RQ in, CTS + ON/SLEEP out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
   P3 --> RX1
   P10 --- GND
+  P9 -.-> GPIO
   GPIO --> P12
+  GPIO -.-> P13
   BUCK -- "5 V" --> VBUS
   BUCK -- "0 V" --- GND
   ANT --> OUT["Outdoor 915 MHz antenna"]

@@ -4,28 +4,32 @@ The XBee settings read so far, what is known about the Oracle display's RJ11 lin
 
 ## XBee configuration
 
-Read from the **receiver's** XBee with XCTU (read only, nothing written):
+Read from both XBees with XCTU (read only, nothing written). The receiver was read 2026-10-26, the station (transmitter) 2026-10-29.
 
-|      Setting       |         Value          |                                                                                            Meaning                                                                                            |
-| ------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Product family     | XB3-24                 | XBee 3 hardware, 2.4 GHz                                                                                                                                                                      |
-| Function set       | Digi XBee3 802.15.4 TH | Simple point-to-point/star protocol (not Zigbee or DigiMesh), through-hole module                                                                                                             |
-| Firmware (`VR`)    | 2006                   |                                                                                                                                                                                               |
-| `AP`               | 0                      | **Transparent mode**: serial bytes pass through unchanged ([AP][xbee-ap])                                                                                                                     |
-| `BD` / `NB` / `SB` | 3 / 0 / 0              | 9600 baud, no parity, 1 stop bit                                                                                                                                                              |
-| `D6`               | 0                      | RTS flow control off: the XBee outputs data whether or not the host is ready                                                                                                                  |
-| `D7`               | 1                      | CTS flow control on (factory default) ([D7][xbee-d7])                                                                                                                                         |
-| `SM`               | 0                      | No sleep                                                                                                                                                                                      |
-| `RO`               | 3                      | Packetization timeout: sends after 3 character times of silence (factory default) ([RO][xbee-ro])                                                                                             |
-| `DH` / `DL`        | 0 / 0                  | 16-bit addressing; the receiver doesn't appear to transmit anything ([802.15.4 addressing][xbee-addr])                                                                                        |
-| `MY`               | 0                      | Receiver's own 16-bit address (factory default). The station's `DL` should be 0 (sent to this receiver, with automatic acknowledgments and retries) or `FFFF` (broadcast, no acknowledgments) |
-| `EE`               | 0                      | No encryption                                                                                                                                                                                 |
+| Setting | Receiver | Station | Meaning |
+| --- | --- | --- | --- |
+| Product family | XB3-24 | XB3-24 | XBee 3 hardware, 2.4 GHz |
+| Function set | Digi XBee3 802.15.4 TH | same | Simple point-to-point/star protocol (not Zigbee or DigiMesh), through-hole module |
+| Firmware (`VR`) | 2006 | 2006 | |
+| `AP` | 0 | 0 | **Transparent mode** on both ends: serial bytes pass through unchanged ([AP][xbee-ap]), so the receiver outputs exactly what the station's controller sent |
+| `BD` / `NB` / `SB` | 3 / 0 / 0 | **7** / 0 / 0 | Receiver 9600 baud, **station 115200 baud**, both no parity and 1 stop bit ([BD][xbee-bd]). Each XBee's serial speed is local to it; the radio link carries the same bytes either way |
+| `D6` | 0 | 0 | RTS flow control off: the XBee outputs data whether or not the host is ready |
+| `D7` | 1 | 1 | CTS flow control on (factory default) ([D7][xbee-d7]) |
+| `SM` | 0 | **1** | Receiver never sleeps. **Station uses pin sleep**: its controller puts the XBee to sleep through SLEEP_RQ (pin 9) between packets ([pin sleep][xbee-pinsleep]) |
+| `RO` | 3 | 3 | Packetization timeout: sends after 3 character times of silence (factory default) ([RO][xbee-ro]) |
+| `DH` / `DL` | 0 / 0 | 0 / **FFFF** | **The station broadcasts** (`DL` = `FFFF`): no acknowledgments or retries, and any number of receivers can listen ([802.15.4 addressing][xbee-addr]) |
+| `MY` | 0 | not recorded | Each XBee's own 16-bit address (factory default 0) |
+| `EE` | 0 | 0 | No encryption |
+| `ID` / `CH` | private | same as receiver | Network ID and channel match on both ends (values kept private, see below) |
 
 The network ID (`ID`) and channel (`CH`) are kept out of this public document on purpose. With encryption off, anyone nearby with an XBee on the same ID and channel could read the station's packets or send fake ones to the display.
 
-**Several receivers can listen at once.** Three XBee receivers (the Oracle display, the IP-100 data logger and the original receiver box's XBee on a USB breakout) all receive the station at the same time. So the station either broadcasts (`DL` = `FFFF`) or all receivers share address 0. Either way, adding another listening XBee (for example on the NAS) works in practice.
+**Several receivers can listen at once.** Three XBee receivers (the Oracle display, the IP-100 data logger and the original receiver box's XBee on a USB breakout) all receive the station at the same time, as expected from the station's broadcast (`DL` = `FFFF`). Adding another listening XBee (for example on the NAS) works.
 
-Still to read: the same settings from the **station's** XBee, especially `AP`, `D7`, `RO`, `MY` and `DL`. If the station XBee is also `AP` = 0, the data path from the station's microcontroller to the receiver output is unmodified.
+**What the station settings mean for the LoRa replacement:**
+
+- **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
+- **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware can mimic this (`SLEEP_RQ_PIN`, `CTS_PIN`, `ON_SLEEP_PIN` in the sketch), but which of these lines the controller actually watches needs the logic-analyzer tap on pins 3, 9, 12 and 13 (**verify**). Digi's `D8` (SLEEP_RQ pin function) and `D9` (ON/SLEEP) settings on the station XBee would also help; they weren't recorded.
 
 ## Receiver to Display Pinout
 
@@ -138,7 +142,7 @@ flowchart LR
   end
 ```
 
-**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). CTS (pin 12) is held in its "ready" state in case the station controller waits for it; XBee flow-control lines are normally active-low (verify).
+**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so spare RAK GPIOs can stand in for the XBee's handshake: CTS (pin 12) low when ready, optionally following SLEEP_RQ (pin 9) and driving ON/SLEEP (pin 13). Dashed lines are only needed if the logic-analyzer tap shows the controller uses them (verify). Which RAK19003 header pins are free GPIOs is still to be checked against the [RAK19003 datasheet][rak19003] (verify).
 
 ```mermaid
 flowchart LR
@@ -148,22 +152,26 @@ flowchart LR
     BAT --> BUCK
   end
   subgraph SOCK["Station board XBee socket<br/>SparkFun BOB-08276 + 2 mm male headers"]
-    P3["Pin 3 DIN<br/>station data OUT"]
+    P3["Pin 3 DIN<br/>station data OUT, 115200 8N1"]
     P10["Pin 10 GND"]
-    P12["Pin 12 CTS<br/>hold at 'ready' (verify)"]
+    P9["Pin 9 SLEEP_RQ<br/>from station controller (optional, verify)"]
+    P12["Pin 12 CTS<br/>low = ready (verify)"]
+    P13["Pin 13 ON/SLEEP<br/>high = awake (optional, verify)"]
     P1["Pin 1 VCC 3.3 V<br/>leave unconnected"]
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
   subgraph RAK["RAK4631 on RAK19003"]
     RX1["J7 pin 1 RX1"]
     GND["J7 GND"]
-    GPIO["spare GPIO<br/>(drives CTS low)"]
+    GPIO["spare GPIOs<br/>SLEEP_RQ in, CTS + ON/SLEEP out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
   P3 --> RX1
   P10 --- GND
+  P9 -.-> GPIO
   GPIO --> P12
+  GPIO -.-> P13
   BUCK -- "5 V" --> VBUS
   BUCK -- "0 V" --- GND
   ANT --> OUT["Outdoor 915 MHz antenna"]
@@ -213,6 +221,8 @@ flowchart LR
 
 - [Digi – XBee 3 TP (module temperature) command][xbee-tp]: the XBee's built-in temperature sensor. It's read with an AT command and is not added to the data stream, which is why bytes 22-23 couldn't be XBee temperature.
 - [Digi – AP (API Enable) command][xbee-ap]: `AP` = 0 means transparent mode, where the XBee passes serial bytes through unchanged.
+- [Digi – BD (baud rate) command][xbee-bd]: `7` = 115200 baud.
+- [Digi – XBee 3 802.15.4 pin sleep (SM = 1)][xbee-pinsleep]: SLEEP_RQ asserted = sleep; ready again when CTS goes low. [Pin signals][xbee-pins-802]: SLEEP_RQ pin 9, CTS pin 12, ON/SLEEP pin 13. [Zigbee pin sleep][xbee-zb-pinsleep]: what CTS and ON/SLEEP do while asleep.
 - [Digi – D7 (DIO7/CTS) command][xbee-d7], [RO (packetization timeout)][xbee-ro], [XBee 802.15.4 addressing][xbee-addr]: the settings read from the receiver.
 - [Digi – Through-hole pinout][xbee-pins]: DOUT pin 2, DIN pin 3, CTS pin 12, RTS pin 16, SLEEP_RQ pin 9 (from the XBee S2C guide; XBee 3 through-hole modules use the same 20-pin layout).
 - [Digi – Transparent operating mode][xbee-transparent]: in transparent mode an XBee is a "serial line replacement", passing bytes through unchanged (this page is from the XBee 3 Cellular guide; the concept is the same on all XBee 3 modules).
@@ -242,6 +252,10 @@ flowchart LR
 [xbee-ap]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_ap.htm
 [xbee-pins]: https://docs.digi.com/resources/documentation/digidocs/90001506/reference/r_pinouts_th_smt_s2c.htm
 [xbee-d7]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_d7.htm
+[xbee-bd]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_cmd_bd.htm
+[xbee-pinsleep]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_mode_pin_sleep.htm
+[xbee-pins-802]: https://docs.digi.com/resources/documentation/digidocs/90001500/reference/r_pinouts_802.htm
+[xbee-zb-pinsleep]: https://docs.digi.com/resources/documentation/digidocs/90002002/concepts/c_zb_pin_sleep.htm
 [xbee-ro]: https://docs.digi.com/resources/documentation/digidocs/90002258/reference/r_cmd_ro.htm
 [xbee-addr]: https://www.digi.com/support/knowledge-base/xbee-802-15-4-addressing
 [xbee-transparent]: https://docs.digi.com/resources/documentation/digidocs/90002258/concepts/c_mode_transparent.htm

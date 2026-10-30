@@ -40,6 +40,7 @@ Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sam
 ## XBee findings
 
 - Receiver XBee: XB3-24, function set Digi XBee3 802.15.4 TH, firmware 2006, AP=0 (transparent), 9600 8N1, D6=0, D7=1 (CTS on), SM=0, RO=3, DH/DL=0/0, MY=0, EE=0 (no encryption).
+- Station XBee (read 2026-10-29): same model/function set/firmware, AP=0, **BD=7 (115200 8N1)**, D6=0, D7=1, **SM=1 (pin sleep via SLEEP_RQ pin 9)**, RO=3, **DH/DL=0/FFFF (broadcast)**, EE=0, ID/CH match. MY, D8, D9 not recorded. Station firmware role reads UART1 at 115200; handshake pins (SLEEP_RQ/CTS/ON_SLEEP) configurable, off by default.
 - Three receivers (Oracle box, IP-100, PC breakout) receive simultaneously, so extra listeners work.
 - The original "busted" receiver box's XBee works; the fault is downstream (level shifting / RJ11 link / display).
 
@@ -49,11 +50,11 @@ Replace the station transmitter and every receiver with RAKwireless RAK4631 (US9
 
 ## Open tasks
 
-1. Read the **station** XBee in XCTU (read only): function set, AP, D7, RO, MY, DL. Don't write settings or update firmware.
-2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one).
+1. Done 2026-10-29 (station XBee settings above). Optional next read: MY, D8, D9.
+2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one). First reading 2026-10-29 ~17:36: 6.92 V vs byte 15 ≈ 6.98-7.01 V (docs/protocol.md).
 3. Identify the Oracle black box -> display RJ11 link (power, RS-485, RS-232 or TTL) with a meter, then capture it. Table in docs/hardware.md "Identifying the link with a meter".
 4. Measure the IP-100 RJ11 port (nothing plugged in); only plug the black box in if pinouts match. Check whether the IP-100's internal radio is a socketed XBee.
-5. Station-side DIN tap (pin 3) with a logic analyzer, optional if station AP=0.
+5. Logic analyzer on station XBee socket pins 3 (DIN @115200), 9 (SLEEP_RQ), 12 (CTS), 13 (ON/SLEEP): which handshake lines does the station controller use? Decides the firmware's handshake pin settings.
 6. Calibrate sea-level pressure offset against the nearest airport METAR at :53 on calm days; confirm elevation with GPS.
 7. RadioLib firmware written and compiled (`lora/`); bench-test with the four RAK kits (bench steps in lora/README.md).
 8. Update the NAS service for the RAK USB receiver (should work as a serial port already).
