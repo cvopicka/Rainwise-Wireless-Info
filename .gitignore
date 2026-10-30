@@ -22,3 +22,6 @@ CLAUDE.local.md
 XBeeModInfo.md
 Rainwise MK3-LR data stream - Claude.pdf
 *.code-workspace
+
+# LoRa firmware private settings (command key)
+lora/rainwise_lora/local_config.h

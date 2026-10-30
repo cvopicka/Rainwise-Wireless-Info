@@ -1,0 +1,5 @@
+// Copy to local_config.h (gitignored) and pick your own random key.
+// Every board that should send or accept remote commands needs the same key.
+// Without local_config.h the station ignores commands and receivers can't send them.
+//   python3 -c "import secrets; print(hex(secrets.randbits(32)))"
+#define COMMAND_KEY 0x00000000UL
