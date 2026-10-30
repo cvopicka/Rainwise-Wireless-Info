@@ -119,13 +119,79 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 6. **Status and commands, no station needed.** With S running and R1 in text mode, a status line should appear every minute (`SLEEP_RQ high (asleep)` with nothing connected, because of the pull-up). Briefly connect S's J6 SDA to GND with a jumper: SLEEP_RQ shows `low (awake)`, and removing the jumper counts one wake. Type `1`, `2`, `0` on R1 and check that each reply shows the new mode and command number; measure J6 SCL (CTS) with the VTVM: low in cts-low, floating in released, following SDA in mirror. Power-cycle S and check that the mode was remembered.
 7. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
 
+## Station wiring: XBee breakout to RAK19003
+
+Four signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) plugs into the station's XBee socket in place of the XBee, through 2 mm male headers ([PRT-10112][sf-2mm-header]), and brings the 20 XBee pins out to 0.1" (2.54 mm) holes. Pin names are from Digi's through-hole pinout ([Digi pin signals][xbee-pins-802]); the RAK19003 header pins are from its datasheet ([RAK19003 datasheet][rak19003]).
+
+| Wire | Breakout (XBee pin) | RAK19003 | Signal | Direction |
+| --- | --- | --- | --- | --- |
+| 1 | **Pin 3** DIN | **J7 pin 1** RX1 | Station data, 115200 8N1 | station → RAK |
+| 2 | **Pin 10** GND | **J7 pin 3** GND | Ground | — |
+| 3 | **Pin 9** SLEEP_RQ | **J6 pin 4** SDA | Controller wakes / sleeps the radio | station → RAK |
+| 4 | **Pin 12** CTS | **J6 pin 3** SCL | "Ready" back to the controller | RAK → station |
+
+**Do not connect:**
+
+- Breakout **pin 1** (VCC 3.3 V): the station's 3.3 V supply. The RAK has its own 5 V supply.
+- RAK19003 **J6 pin 1** (3.3 V): an *output* from the RAK. Joining it to the station's 3.3 V would put two supplies against each other.
+- RAK19003 **J7 pin 4** (BOOT) and **J7 pin 2** (TX1): not used at the station. The link is one-way.
+- Every other breakout pin, including pin 2 (DOUT) and pin 13 (ON/SLEEP), which the XBee drove but the RAK doesn't (verify with the first status messages).
+
+**Power:** a 5 V buck converter from the station battery feeds the RAK's USB-C (a cut USB cable) or VBUS. Set the buck output to 5 V with the meter *before* connecting it. In a cut USB cable, red is usually +5 V and black is ground, but check with the meter: cable colors aren't guaranteed. The battery's negative and the station's GND (breakout pin 10) are expected to be the same point, so the grounds join through both paths (verify with a continuity check before connecting).
+
+```mermaid
+flowchart LR
+  subgraph BOB["SparkFun XBee breakout (in the station's XBee socket)"]
+    B3["Pin 3 · DIN"]
+    B10["Pin 10 · GND"]
+    B9["Pin 9 · SLEEP_RQ"]
+    B12["Pin 12 · CTS"]
+    B1["Pin 1 · VCC 3.3 V<br/>DO NOT CONNECT"]
+  end
+  subgraph RAK["RAK4631 on RAK19003"]
+    J7_1["J7-1 · RX1"]
+    J7_3["J7-3 · GND"]
+    J6_4["J6-4 · SDA (pin 13)"]
+    J6_3["J6-3 · SCL (pin 14)"]
+    J6_1["J6-1 · 3.3 V out<br/>DO NOT CONNECT"]
+    USB["USB-C / VBUS · 5 V in"]
+  end
+  BAT["Station battery<br/>6 V SLA"] --> BUCK["Buck converter<br/>set to 5 V first"]
+  B3 -- "1: data 115200" --> J7_1
+  B10 -- "2: ground" --- J7_3
+  B9 -- "3: wake / sleep" --> J6_4
+  J6_3 -- "4: ready (CTS)" --> B12
+  BUCK -- "+5 V" --> USB
+  BUCK -- "0 V" --- J7_3
+```
+
+**Where the pins are on the breakout.** Looking down on the XBee (and the breakout, in the same orientation), pin 1 is top-left; pins 1-10 run down the left side and pins 11-20 come back up the right side, so pin 20 sits across from pin 1 ([XBee datasheet pin drawing][xbee-s1-ds]). The four used pins are all near the ends of the rows:
+
+```
+                     XBee / breakout, top view
+                       ┌─────────────────┐
+  do not connect  VCC  1 ●               ● 20
+                 DOUT  2 ●               ● 19
+   wire 1 ──▶     DIN  3 ●               ● 18
+                       4 ●               ● 17
+                       5 ●               ● 16
+                       6 ●               ● 15
+                       7 ●               ● 14
+                       8 ●               ● 13  ON/SLEEP (not used)
+   wire 3 ──▶ SLEEP_RQ 9 ●               ● 12  CTS ◀── wire 4
+   wire 2 ──▶     GND 10 ●               ● 11
+                       └─────────────────┘
+```
+
+Pin 9 (SLEEP_RQ) and pin 12 (CTS) sit directly across from each other, one row above GND (pin 10). Check the breakout's silkscreen against this before soldering; the SparkFun board marks pin 1 (verify on your board).
+
 ## Station install (one trip)
 
 Everything fiddly happens indoors; the ladder part is a swap and a plug.
 
 **Indoors, beforehand:**
 1. Solder 2.54 mm header pins or wires to the RAK19003's J6 and J7, and the 2 mm male headers to the SparkFun XBee breakout (both are small parts; use good light and a magnifier).
-2. Wire the breakout to the RAK19003: pin 3 (DIN) to J7 RX1, pin 10 (GND) to J7 GND, pin 9 (SLEEP_RQ) to J6 SDA, pin 12 (CTS) to J6 SCL. Leave the breakout's pin 1 (3.3 V) unconnected. Label each wire.
+2. Wire the breakout to the RAK19003 as in [Station wiring](#station-wiring-xbee-breakout-to-rak19003): pin 3 (DIN) to J7 RX1, pin 10 (GND) to J7 GND, pin 9 (SLEEP_RQ) to J6 SDA, pin 12 (CTS) to J6 SCL. Leave the breakout's pin 1 (3.3 V) unconnected. Label each wire.
 3. Wire the 5 V buck converter's output to the RAK's USB-C (a cut USB cable) or VBUS, and set its output to 5 V with the meter before connecting.
 4. Flash the station role and run bench step 6 with this exact assembly. Put it in its enclosure with the antenna attached.
 
@@ -142,7 +208,10 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 - [RadioLib – SX1262 class reference][radiolib-sx1262]: `begin()` parameters (frequency, bandwidth, SF, CR, sync word, power, preamble, TCXO voltage).
 - [RAKwireless – RAK-nRF52-Arduino core][rak-core]: board support; `variant.h` gives the UART, LED and default SPI pins.
 - [Meshtastic – RAK4631 variant.h][mesh-variant]: SX1262 pins, power-enable pin 37, DIO2 RF switch, 1.8 V TCXO.
-- [RAKwireless – RAK19003 datasheet][rak19003]: UART1 on J7, 5 V input limits.
+- [RAKwireless – RAK19003 datasheet][rak19003]: UART1 on J7, 5 V input limits, J6/J7 pin order.
+- [SparkFun – XBee breakout][sf-xbee-bob] and [2 mm XBee header][sf-2mm-header]: plugging into the station's XBee socket.
+- [Digi – XBee 802.15.4 pin signals][xbee-pins-802]: pin 3 DIN, 9 SLEEP_RQ, 10 GND, 12 CTS, 13 ON/SLEEP.
+- [Digi/SparkFun – XBee Series 1 datasheet][xbee-s1-ds] (PDF): pin drawing, pin 1 top-left, pin 20 top-right.
 - [RAKwireless – RAK4631 Quick Start][rak4631-qs]: Arduino setup, bootloader, restoring Meshtastic.
 - [Semtech – SX1262][sx1262]: datasheet (output power, overcurrent protection, airtime formula).
 - [Semtech – AN1200.22 LoRa Modulation Basics][an1200-22]: sensitivity vs. bandwidth and spreading factor (in the documents list on the SX1276 page).
@@ -170,3 +239,7 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 [pio-ini]: https://docs.platformio.org/en/latest/projectconf/index.html
 [pyserial]: https://pyserial.readthedocs.io/
 [nrfutil]: https://github.com/adafruit/Adafruit_nRF52_nrfutil
+[sf-xbee-bob]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
+[sf-2mm-header]: https://sparkfun.com/products/10112
+[xbee-pins-802]: https://docs.digi.com/resources/documentation/digidocs/90001500/reference/r_pinouts_802.htm
+[xbee-s1-ds]: https://cdn.sparkfun.com/assets/4/9/0/0/f/XBee-Datasheet.pdf
