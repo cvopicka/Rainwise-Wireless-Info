@@ -2,9 +2,11 @@
   Rainwise MK-III-LR LoRa link (replaces the XBee 802.15.4 radios).
 
   One sketch, two roles, chosen at compile time with ROLE:
-    ROLE_STATION   reads the station's 32-byte packets (9600 8N1) on UART1
-                   (and on USB, for bench replay), checks the CRC and
-                   transmits each valid packet unchanged over LoRa.
+    ROLE_STATION   reads the station's 32-byte packets (115200 8N1, the
+                   station XBee's BD=7) on UART1 (and on USB, for bench
+                   replay), checks the CRC and transmits each valid packet
+                   unchanged over LoRa. Optionally mimics the XBee's pin-sleep
+                   handshake (SLEEP_RQ in, CTS and ON/SLEEP out).
     ROLE_RECEIVER  receives LoRa packets, checks length, header and CRC, and
                    writes the 32 raw bytes to USB and UART1 at 9600 8N1, the
                    same byte stream an XBee in transparent mode (AP=0) gives.
@@ -36,10 +38,20 @@
 #define LORA_POWER_EN 37   // powers the RF switch; must be HIGH
 #define LORA_TCXO_V 1.8    // TCXO supplied from DIO3
 #define LED_PIN LED_GREEN  // LED_BUILTIN on RAK4631
-// Station only: hold the XBee socket's CTS (pin 12) "ready" if the station
-// MCU waits for it. -1 = not driven. Active level is unconfirmed (verify).
+// Station only: XBee socket handshake lines, -1 = not connected.
+// The station XBee runs pin sleep (SM=1): SLEEP_RQ (socket pin 9) high = sleep,
+// low = wake; the XBee then drives CTS (pin 12) low and ON/SLEEP (pin 13) high
+// when ready. With SLEEP_RQ_PIN set, CTS and ON/SLEEP follow it the same way;
+// without it, CTS is held low (ready). Which lines the station MCU actually
+// uses is unconfirmed (verify with a logic analyzer on pins 3, 9, 12, 13).
+#define SLEEP_RQ_PIN -1
 #define CTS_PIN -1
-#define CTS_READY_LEVEL LOW
+#define ON_SLEEP_PIN -1
+
+// UART1 speed per role: the station MCU talks to its XBee at 115200 (BD=7);
+// the receiver XBees output 9600 (BD=3) to the display and IP-100.
+#define STATION_UART_BAUD 115200
+#define RECEIVER_UART_BAUD 9600
 
 // The core's default SPI is wired to the WisBlock IO slot, not the radio,
 // so the SX1262 gets its own bus on the unused SPIM2 peripheral.
@@ -113,10 +125,22 @@ void printHex(const uint8_t *p, size_t len) {
   }
 }
 
+// Non-blocking LED blink: a delay() here could overflow the 64-byte UART
+// receive buffer (32 bytes take under 3 ms at 115200).
+uint32_t blinkStartMs = 0;
+bool blinkActive = false;
+
 void blink() {
   digitalWrite(LED_PIN, HIGH);
-  delay(20);
-  digitalWrite(LED_PIN, LOW);
+  blinkActive = true;
+  blinkStartMs = millis();
+}
+
+void serviceLed() {
+  if (blinkActive && millis() - blinkStartMs >= 20) {
+    digitalWrite(LED_PIN, LOW);
+    blinkActive = false;
+  }
 }
 
 void fail(const char *what, int16_t state) {
@@ -169,20 +193,30 @@ void queuePacket(const uint8_t *p, const char *src) {
   }
 }
 
+// Mimic the XBee's pin-sleep outputs: awake (SLEEP_RQ low) -> CTS low, ON/SLEEP high.
+void serviceHandshake() {
+  bool asleep = (SLEEP_RQ_PIN >= 0) && digitalRead(SLEEP_RQ_PIN) == HIGH;
+  if (CTS_PIN >= 0) digitalWrite(CTS_PIN, asleep ? HIGH : LOW);
+  if (ON_SLEEP_PIN >= 0) digitalWrite(ON_SLEEP_PIN, asleep ? LOW : HIGH);
+}
+
 void setup() {
   pinMode(LED_PIN, OUTPUT);
-  if (CTS_PIN >= 0) {
-    pinMode(CTS_PIN, OUTPUT);
-    digitalWrite(CTS_PIN, CTS_READY_LEVEL);
-  }
-  Serial.begin(115200);  // USB CDC; baud is ignored
-  Serial1.begin(9600);   // UART1 (RX1/TX1 on RAK19003 J7) <- XBee socket DIN, pin 3
+  // XBee inputs have pull-ups by default (PR command); match that on SLEEP_RQ.
+  if (SLEEP_RQ_PIN >= 0) pinMode(SLEEP_RQ_PIN, INPUT_PULLUP);
+  if (CTS_PIN >= 0) pinMode(CTS_PIN, OUTPUT);
+  if (ON_SLEEP_PIN >= 0) pinMode(ON_SLEEP_PIN, OUTPUT);
+  serviceHandshake();
+  Serial.begin(115200);              // USB CDC; baud is ignored
+  Serial1.begin(STATION_UART_BAUD);  // UART1 (RX1/TX1 on RAK19003 J7) <- XBee socket DIN, pin 3
   setupRadio();
   Serial.print("station ready, airtime per packet ms: ");
   Serial.println(radio.getTimeOnAir(PACKET_LEN) / 1000.0);
 }
 
 void loop() {
+  serviceHandshake();
+  serviceLed();
   while (Serial1.available())
     if (uartFramer.push(Serial1.read())) queuePacket(uartFramer.buf, "uart");
   while (Serial.available())
@@ -223,13 +257,14 @@ uint32_t good = 0, bad = 0;
 void setup() {
   pinMode(LED_PIN, OUTPUT);
   Serial.begin(115200);  // USB CDC to the NAS/PC: raw packets, like the XBee breakout
-  Serial1.begin(9600);   // UART1 TX1 -> display line driver / local XBee
+  Serial1.begin(RECEIVER_UART_BAUD);  // UART1 TX1 -> display line driver / local XBee
   setupRadio();
   int16_t state = radio.startReceive();
   if (state != RADIOLIB_ERR_NONE) fail("startReceive", state);
 }
 
 void loop() {
+  serviceLed();
   // Typing 'd' in a serial monitor switches between raw bytes and readable text with RSSI/SNR.
   while (Serial.available())
     if (Serial.read() == 'd') debugText = !debugText;

@@ -2,7 +2,7 @@
 
 Firmware for the XBee replacement planned in [docs/hardware.md](../docs/hardware.md#lora-replacement-plan). One sketch, two roles:
 
-- **Station:** reads the station's 32-byte packets at 9600 8N1 on UART1, checks header and CRC, and transmits each valid packet unchanged.
+- **Station:** reads the station's 32-byte packets at **115200** 8N1 on UART1 (the station XBee's `BD` = 7; see [XBee configuration](../docs/hardware.md#xbee-configuration)), checks header and CRC, and transmits each valid packet unchanged. It can also stand in for the XBee's pin-sleep handshake lines.
 - **Receiver:** receives LoRa packets, checks length, header and CRC, and writes the 32 raw bytes to USB and to UART1 at 9600 8N1. That's the same byte stream an XBee in transparent mode (`AP` = 0) delivers, so `rainwise_logger.py` and the NAS service can read it as is.
 
 | File | What |
@@ -55,7 +55,9 @@ From RAK's core ([RAK-nRF52-Arduino][rak-core], `variants/WisCore_RAK4631_Board/
 | UART1 RX1 / TX1 | 15 / 16 | RAK19003 header J7 ([RAK19003 datasheet][rak19003]) |
 | Green LED | 35 | Blinks once per packet; fast blink = radio failed to start |
 
-`CTS_PIN` (station only) is off (-1) until we know whether the station MCU waits on the XBee's CTS (pin 12) and which level means "ready" (**verify**, open task 1).
+UART1 runs at `STATION_UART_BAUD` (115200) in the station role and `RECEIVER_UART_BAUD` (9600) in the receiver role.
+
+**Station handshake pins** (all -1, off, by default). The station XBee uses pin sleep (`SM` = 1): SLEEP_RQ (socket pin 9) high = sleep, low = awake, and the XBee answers with CTS (pin 12) low and ON/SLEEP (pin 13) high when ready ([Digi pin sleep][xbee-pinsleep]). Set `SLEEP_RQ_PIN`, `CTS_PIN` and `ON_SLEEP_PIN` to free RAK19003 GPIOs to copy that behaviour; with only `CTS_PIN` set, CTS is held low (always ready). Which lines the station controller actually uses needs the logic-analyzer tap on pins 3, 9, 12 and 13 (**verify**). The LED blink is non-blocking so the 64-byte UART receive buffer can't overflow at 115200.
 
 ## Building and flashing (PlatformIO in VS Code)
 
@@ -82,7 +84,7 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 2. **Logger end to end.** Put R1 back in raw mode (`d` again, or unplug and replug), close the monitor, and run `python rainwise_logger.py --port /dev/ttyACM1 --no-xml` on it. The rows should match the replayed CSV.
 3. **Several receivers.** R2 and R3 should count the same packets as R1 at the same time.
 4. **UART1 output.** Connect a 3.3 V USB-serial adapter to R1's TX1 and GND, open it at 9600 8N1, and check that the same 32-byte packets come out. This is the output that will feed the Oracle line driver or a local XBee.
-5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. Check that both sides are 3.3 V logic first (**verify**).
+5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. A receiver-configured XBee outputs at **9600**, so build S with `STATION_UART_BAUD` set to 9600 for this test. Check that both sides are 3.3 V logic first (**verify**).
 6. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
 
 ## References
@@ -95,6 +97,7 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 - [Semtech – SX1262][sx1262]: datasheet (output power, overcurrent protection, airtime formula).
 - [Semtech – AN1200.22 LoRa Modulation Basics][an1200-22]: sensitivity vs. bandwidth and spreading factor (in the documents list on the SX1276 page).
 - [Semtech forum – SX126x time-on-air calculation][lora-toa]
+- [Digi – XBee 3 802.15.4 pin sleep][xbee-pinsleep]: SLEEP_RQ and CTS behaviour the station role can mimic.
 - [LoRa Alliance – RP002 Regional Parameters][rp002]: US915 channel plan.
 - [eCFR – 47 CFR 15.247][ecfr-15247]: 902-928 MHz rules (500 kHz minimum 6 dB bandwidth, power, antenna gain).
 - [RAKwireless – WisBlock PlatformIO guide][rak-pio]: RAK_PATCH_V2 board files used in `rakwireless/`.
@@ -110,6 +113,7 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 [sx1262]: https://www.semtech.com/products/wireless-rf/lora-connect/sx1262
 [an1200-22]: https://www.semtech.com/products/wireless-rf/lora-connect/sx1276
 [lora-toa]: https://forum.lora-developers.semtech.com/t/sx126x-time-on-air-calculation/127
+[xbee-pinsleep]: https://docs.digi.com/resources/documentation/digidocs/90002273/reference/r_mode_pin_sleep.htm
 [rp002]: https://resources.lora-alliance.org/technical-specifications/rp002-1-0-4-regional-parameters
 [ecfr-15247]: https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-15/subpart-C/section-15.247
 [rak-pio]: https://github.com/RAKWireless/WisBlock/blob/master/PlatformIO/README.md
