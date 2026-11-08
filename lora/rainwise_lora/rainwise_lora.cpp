@@ -55,11 +55,13 @@
 // low = wake; the XBee then drives CTS (pin 12) low and ON/SLEEP (pin 13) high
 // when ready. The RAK19003 only brings these out on its 2.54 mm headers, so the
 // I2C pins on J6 (unused here) serve as plain GPIO: SDA (13) <- SLEEP_RQ,
-// SCL (14) -> CTS. Which lines the station MCU actually uses is unconfirmed
-// (verify); the status message and the handshake modes below find out.
+// SCL (14) -> CTS. The station never sends on UART1, so TX1 (16, J7 pin 2) is
+// released from the UART and drives ON/SLEEP (XBee D9=1 enables it on the
+// station XBee, read 2026-11-08). Which lines the station MCU actually uses is
+// unconfirmed (verify); the status message and the handshake modes find out.
 #define SLEEP_RQ_PIN 13
 #define CTS_PIN 14
-#define ON_SLEEP_PIN -1
+#define ON_SLEEP_PIN PIN_SERIAL1_TX
 
 // UART1 speed per role: the station MCU talks to its XBee at 115200 (BD=7);
 // the receiver XBees output 9600 (BD=3) to the display and IP-100.
@@ -322,7 +324,37 @@ void serviceHandshake() {
       digitalWrite(CTS_PIN, (mode == HS_MIRROR && asleep) ? HIGH : LOW);
     }
   }
-  if (ON_SLEEP_PIN >= 0) digitalWrite(ON_SLEEP_PIN, asleep ? LOW : HIGH);
+  // ON/SLEEP is the XBee's "awake" output: high while awake. It follows the
+  // same mode as CTS: mirrors SLEEP_RQ, always "awake", or not driven.
+  if (ON_SLEEP_PIN >= 0) {
+    if (mode == HS_RELEASED) {
+      pinMode(ON_SLEEP_PIN, INPUT);
+    } else {
+      pinMode(ON_SLEEP_PIN, OUTPUT);
+      digitalWrite(ON_SLEEP_PIN, (mode == HS_MIRROR && asleep) ? LOW : HIGH);
+    }
+  }
+}
+
+// The core's Serial1.begin() connects both RX1 and TX1 to the UARTE, which then
+// owns TX1 and holds it high. The station only receives, so disconnect TX1 from
+// the UARTE to use it as a GPIO (ON/SLEEP). PSEL may only be changed while the
+// UARTE is disabled, and RX must be stopped first (nRF52840 Product
+// Specification, UARTE chapter). Runs once at startup, before any data arrives.
+void releaseUart1Tx() {
+  NVIC_DisableIRQ(UARTE0_UART0_IRQn);
+  NRF_UARTE0->EVENTS_RXTO = 0;
+  NRF_UARTE0->TASKS_STOPRX = 1;
+  while (!NRF_UARTE0->EVENTS_RXTO) {
+  }
+  NRF_UARTE0->EVENTS_RXTO = 0;
+  NRF_UARTE0->EVENTS_ENDRX = 0;
+  NRF_UARTE0->ENABLE = UARTE_ENABLE_ENABLE_Disabled;
+  NRF_UARTE0->PSEL.TXD = 0xFFFFFFFF;  // disconnected
+  NRF_UARTE0->ENABLE = UARTE_ENABLE_ENABLE_Enabled;
+  NRF_UARTE0->TASKS_STARTRX = 1;  // RXD.PTR and MAXCNT are kept from begin()
+  NVIC_ClearPendingIRQ(UARTE0_UART0_IRQn);
+  NVIC_EnableIRQ(UARTE0_UART0_IRQn);
 }
 
 void buildStatus(uint8_t *s) {
@@ -402,6 +434,8 @@ void setup() {
   serviceHandshake();
   Serial.begin(115200);              // USB CDC; baud is ignored
   Serial1.begin(STATION_UART_BAUD);  // UART1 (RX1/TX1 on RAK19003 J7) <- XBee socket DIN, pin 3
+  if (ON_SLEEP_PIN == PIN_SERIAL1_TX) releaseUart1Tx();
+  serviceHandshake();  // drive ON/SLEEP now that TX1 is a GPIO
   setupRadio();
   Serial.print("station ready, handshake ");
   Serial.print(MODE_NAMES[mode]);

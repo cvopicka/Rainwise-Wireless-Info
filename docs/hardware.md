@@ -33,7 +33,7 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
 - **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
 - **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). The station XBee's `D8` = 1 and `D9` = 1 (read 2026-11-08) mean both pins are active, but not whether the controller uses them. Two conclusions:
   - **The controller must drive SLEEP_RQ.** With `SM` = 1 and `D8` = 1, a SLEEP_RQ left high keeps the XBee asleep, so it would never transmit. The station has always transmitted, so the controller pulls pin 9 low to wake it. This supports mirror mode as the default (**verify** with the first status messages).
-  - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". The firmware doesn't drive pin 13 yet (`ON_SLEEP_PIN` = -1), so if the controller watches pin 13, no data would be sent. Which one it reads is unknown (**verify**).
+  - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". Which one it reads is unknown (**verify**), so the station firmware drives both: ON/SLEEP comes from the RAK19003's TX1 pin (J7 pin 2), which the station doesn't need for serial output (added 2026-11-08, [lora/README.md](../lora/README.md#board-pins-rak4631)).
 
 ## Station main board
 
@@ -168,7 +168,7 @@ flowchart LR
   end
 ```
 
-**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so the RAK stands in for the XBee's handshake: it reads SLEEP_RQ (pin 9) and drives CTS (pin 12) the way the XBee did. The RAK19003 brings out only two 2.54 mm headers, J6 (3.3 V, GND, SDA, SCL) and J7 (RX1, TX1, GND, BOOT); its other IO pins are on board-to-board connectors ([RAK19003 datasheet][rak19003]). I2C isn't used, so J6's SDA and SCL serve as the two handshake pins. The CTS behaviour can be changed over the air if the controller turns out to expect something else (verify; see [lora/README.md](../lora/README.md#status-messages-and-remote-commands)), and the whole assembly is wired and tested indoors so the ladder part is a module swap ([station install](../lora/README.md#station-install-one-trip)).
+**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so the RAK stands in for the XBee's handshake: it reads SLEEP_RQ (pin 9) and drives CTS (pin 12) and ON/SLEEP (pin 13) the way the XBee did. The RAK19003 brings out only two 2.54 mm headers, J6 (3.3 V, GND, SDA, SCL) and J7 (RX1, TX1, GND, BOOT); its other IO pins are on board-to-board connectors ([RAK19003 datasheet][rak19003]). I2C isn't used, so J6's SDA and SCL serve as SLEEP_RQ and CTS, and the station's unused TX1 serves as ON/SLEEP. The CTS behaviour can be changed over the air if the controller turns out to expect something else (verify; see [lora/README.md](../lora/README.md#status-messages-and-remote-commands)), and the whole assembly is wired and tested indoors so the ladder part is a module swap ([station install](../lora/README.md#station-install-one-trip)).
 
 ```mermaid
 flowchart LR
@@ -182,7 +182,7 @@ flowchart LR
     P10["Pin 10 GND"]
     P9["Pin 9 SLEEP_RQ<br/>from station controller"]
     P12["Pin 12 CTS<br/>low = ready; mode set over the air"]
-    P13["Pin 13 ON/SLEEP<br/>not wired (add only if needed)"]
+    P13["Pin 13 ON/SLEEP<br/>awake = high; follows the CTS mode"]
     P1["Pin 1 VCC 3.3 V<br/>leave unconnected"]
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
@@ -191,6 +191,7 @@ flowchart LR
     GND["J7 GND"]
     SDA["J6 SDA (pin 13)<br/>SLEEP_RQ in"]
     SCL["J6 SCL (pin 14)<br/>CTS out"]
+    TXS["J7 pin 2 TX1 (pin 16)<br/>ON/SLEEP out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
@@ -198,6 +199,7 @@ flowchart LR
   P10 --- GND
   P9 --> SDA
   SCL --> P12
+  TXS --> P13
   BUCK -- "5 V" --> VBUS
   BUCK -- "0 V" --- GND
   ANT --> OUT["Outdoor 915 MHz antenna"]
