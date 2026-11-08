@@ -31,6 +31,20 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
 - **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
 - **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). Digi's `D8` (SLEEP_RQ pin function) and `D9` (ON/SLEEP) settings on the station XBee would also help; they weren't recorded.
 
+## Station "Ext Comms" connector
+
+The station's main board has a 3-pin connector labelled "Ext Comms". Its purpose and pinout are undocumented. A plug-in connector would be an easier place to attach the LoRa board than the XBee socket, if it carries the same data.
+
+First measurement (2026-11-08, station running, nothing plugged in, DC volts to the battery negative, RadioShack 22-807):
+
+| Pin (as seen at the station) | Reading |
+| --- | --- |
+| Left | 0 mV |
+| Middle | 30-50 mV, drifting while the probe was held there |
+| Right | 0 mV |
+
+No pin carries a supply voltage, and none sits at an idle UART level (logic high around 3.3 or 5 V) or an RS-232 idle level (−3 to −15 V). The drifting few tens of millivolts on the middle pin looks like an undriven (floating) line read by the meter's 10 MΩ input. Possible explanations, none confirmed: the port's driver is switched off until something is connected or the port is enabled in the station's settings; the middle pin is an input for an external device; or the port only transmits in bursts too short for the meter. Left and right reading 0 mV doesn't prove either is ground (an undriven line can also read 0 mV). The next check is resistance from each pin to the battery negative with the station off (**verify**), but it isn't urgent, because the XBee-socket install doesn't depend on it.
+
 ## Receiver to Display Pinout
 
 - 4 wires on an RJ11 connector
