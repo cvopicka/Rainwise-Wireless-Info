@@ -27,8 +27,7 @@ Rainwise MK3-LR data stream - Claude.pdf
 lora/rainwise_lora/local_config.h
 
 # Local serial-port shortcuts (symlinks to /dev/serial/by-id, machine-specific)
-/station
-/receiver*
+/ports/
 
 # Station photos (backgrounds show the property)
 /photos/
