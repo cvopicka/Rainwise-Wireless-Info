@@ -4,7 +4,7 @@ The XBee settings read so far, what is known about the Oracle display's RJ11 lin
 
 ## XBee configuration
 
-Read from both XBees with XCTU (read only, nothing written). The receiver was read 2026-10-26, the station (transmitter) 2026-10-29.
+Read from both XBees with XCTU (read only, nothing written). The receiver was read 2026-10-26, the station (transmitter) 2026-10-29, with `MY`, `D8` and `D9` added 2026-11-08.
 
 | Setting | Receiver | Station | Meaning |
 | --- | --- | --- | --- |
@@ -18,7 +18,9 @@ Read from both XBees with XCTU (read only, nothing written). The receiver was re
 | `SM` | 0 | **1** | Receiver never sleeps. **Station uses pin sleep**: its controller puts the XBee to sleep through SLEEP_RQ (pin 9) between packets ([pin sleep][xbee-pinsleep]) |
 | `RO` | 3 | 3 | Packetization timeout: sends after 3 character times of silence (factory default) ([RO][xbee-ro]) |
 | `DH` / `DL` | 0 / 0 | 0 / **FFFF** | **The station broadcasts** (`DL` = `FFFF`): no acknowledgments or retries, and any number of receivers can listen ([802.15.4 addressing][xbee-addr]) |
-| `MY` | 0 | not recorded | Each XBee's own 16-bit address (factory default 0) |
+| `MY` | 0 | 0 | Each XBee's own 16-bit address (factory default 0) |
+| `D8` | not recorded | 1 | Pin 9 works as SLEEP_RQ (DTR/Sleep_Rq) |
+| `D9` | not recorded | 1 | Pin 13 works as ON/SLEEP (Awake/nSleep indicator): the XBee drives it high while awake |
 | `EE` | 0 | 0 | No encryption |
 | `ID` / `CH` | private | same as receiver | Network ID and channel match on both ends (values kept private, see below) |
 
@@ -29,7 +31,9 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
 **What the station settings mean for the LoRa replacement:**
 
 - **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
-- **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). Digi's `D8` (SLEEP_RQ pin function) and `D9` (ON/SLEEP) settings on the station XBee would also help; they weren't recorded.
+- **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behaviour is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). The station XBee's `D8` = 1 and `D9` = 1 (read 2026-11-08) mean both pins are active, but not whether the controller uses them. Two conclusions:
+  - **The controller must drive SLEEP_RQ.** With `SM` = 1 and `D8` = 1, a SLEEP_RQ left high keeps the XBee asleep, so it would never transmit. The station has always transmitted, so the controller pulls pin 9 low to wake it. This supports mirror mode as the default (**verify** with the first status messages).
+  - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". The firmware doesn't drive pin 13 yet (`ON_SLEEP_PIN` = -1), so if the controller watches pin 13, no data would be sent. Which one it reads is unknown (**verify**).
 
 ## Station "Ext Comms" connector
 

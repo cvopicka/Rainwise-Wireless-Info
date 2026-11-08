@@ -40,7 +40,7 @@ Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sam
 ## XBee findings
 
 - Receiver XBee: XB3-24, function set Digi XBee3 802.15.4 TH, firmware 2006, AP=0 (transparent), 9600 8N1, D6=0, D7=1 (CTS on), SM=0, RO=3, DH/DL=0/0, MY=0, EE=0 (no encryption).
-- Station XBee (read 2026-10-29): same model/function set/firmware, AP=0, **BD=7 (115200 8N1)**, D6=0, D7=1, **SM=1 (pin sleep via SLEEP_RQ pin 9)**, RO=3, **DH/DL=0/FFFF (broadcast)**, EE=0, ID/CH match. MY, D8, D9 not recorded. Station firmware role reads UART1 at 115200; SLEEP_RQ in on J6 SDA (pin 13), CTS out on J6 SCL (pin 14); handshake mode (mirror/cts-low/released) settable over the air and saved in flash; status message every 60 s.
+- Station XBee (read 2026-10-29): same model/function set/firmware, AP=0, **BD=7 (115200 8N1)**, D6=0, D7=1, **SM=1 (pin sleep via SLEEP_RQ pin 9)**, RO=3, **DH/DL=0/FFFF (broadcast)**, EE=0, ID/CH match. MY=0, D8=1 (SLEEP_RQ), D9=1 (ON/SLEEP output on; controller may read pin 13 instead of CTS, firmware doesn't drive it yet). Station firmware role reads UART1 at 115200; SLEEP_RQ in on J6 SDA (pin 13), CTS out on J6 SCL (pin 14); handshake mode (mirror/cts-low/released) settable over the air and saved in flash; status message every 60 s.
 - Three receivers (Oracle box, IP-100, PC breakout) receive simultaneously, so extra listeners work.
 - The original "busted" receiver box's XBee works; the fault is downstream (level shifting / RJ11 link / display).
 
@@ -50,7 +50,7 @@ Replace the station transmitter and every receiver with RAKwireless RAK4631 (US9
 
 ## Open tasks
 
-1. Done 2026-10-29 (station XBee settings above). Optional next read: MY, D8, D9.
+1. Done 2026-10-29 and 2026-11-08 (station XBee settings above, all read).
 2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one). First reading 2026-10-29 ~17:36: 6.92 V vs byte 15 ≈ 6.98-7.01 V. Daytime discharge test 2026-11-07: byte 15 matches the meter within its ±0.19 V tolerance (RadioShack 22-807, ±1.5 % +0.2 % FS); too coarse to test temperature drift; red LED on main board blinks every 2 s (matches packet rate, also in daylight 2026-11-08; likely activity light, verify); rain counter (byte 13) resets to 0 on power-up (docs/protocol.md).
 3. Identify the Oracle black box -> display RJ11 link (power, RS-485, RS-232 or TTL) with a meter, then capture it. Table in docs/hardware.md "Identifying the link with a meter".
 4. Measure the IP-100 RJ11 port (nothing plugged in); only plug the black box in if pinouts match. Check whether the IP-100's internal radio is a socketed XBee.
