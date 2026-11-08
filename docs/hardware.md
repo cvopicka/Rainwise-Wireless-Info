@@ -35,6 +35,14 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
   - **The controller must drive SLEEP_RQ.** With `SM` = 1 and `D8` = 1, a SLEEP_RQ left high keeps the XBee asleep, so it would never transmit. The station has always transmitted, so the controller pulls pin 9 low to wake it. This supports mirror mode as the default (**verify** with the first status messages).
   - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". The firmware doesn't drive pin 13 yet (`ON_SLEEP_PIN` = -1), so if the controller watches pin 13, no data would be sent. Which one it reads is unknown (**verify**).
 
+## Station main board
+
+From photos taken 2026-11-08 (kept private because the backgrounds show the property):
+
+- **Board:** silkscreen "©2014 RainWise Inc. P/N 08221110 Rev. 0, MKIII MSP430". The controller is a TI MSP430 microcontroller (U14, a 64-pin flat package; exact part not read). The board also has a JTAG header, a 5-position DIP switch, a "Status" LED (D3, the red light that blinks every 2 s), connectors for the PV panel, a switch and the battery (J5), two RJ-style sensor jacks (J1, J7) and the 3-pin "Ext Comms" connector (J3).
+- **XBee socket:** two 10-pin 2 mm sockets, **J6** (right) and **J4** (left), between them the label "2.4GHz". The XBee sits with its antenna end **pointing down**: the outline's angled corners are at the bottom, and on the back of the board the square pad (pin 1) is at the bottom of J6. So J6 holds pins 1-10 (pin 1 at the bottom, pin 10 at the top) and J4 holds pins 11-20 (pin 11 at the top, pin 20 at the bottom). Pin 9 (SLEEP_RQ) is second from the top of J6; pin 12 (CTS) and pin 13 (ON/SLEEP) are second and third from the top of J4. The SparkFun breakout must go in the same way: its pin 1 at the bottom right.
+- **Which socket pins are wired:** not visible. The board is conformally coated and the traces under the socket can't be followed in the photos, so whether the controller reads CTS (pin 12), ON/SLEEP (pin 13) or neither is still unknown (**verify**).
+
 ## Station "Ext Comms" connector
 
 The station's main board has a 3-pin connector labelled "Ext Comms". Its purpose and pinout are undocumented. A plug-in connector would be an easier place to attach the LoRa board than the XBee socket, if it carries the same data.

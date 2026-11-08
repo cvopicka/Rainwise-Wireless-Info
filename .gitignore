@@ -29,3 +29,6 @@ lora/rainwise_lora/local_config.h
 # Local serial-port shortcuts (symlinks to /dev/serial/by-id, machine-specific)
 /station
 /receiver*
+
+# Station photos (backgrounds show the property)
+/photos/
