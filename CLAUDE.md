@@ -51,7 +51,7 @@ Replace the station transmitter and every receiver with RAKwireless RAK4631 (US9
 ## Open tasks
 
 1. Done 2026-10-29 (station XBee settings above). Optional next read: MY, D8, D9.
-2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one). First reading 2026-10-29 ~17:36: 6.92 V vs byte 15 ≈ 6.98-7.01 V (docs/protocol.md).
+2. Night multimeter reading of the station battery vs byte 15 (and a warm-afternoon one). First reading 2026-10-29 ~17:36: 6.92 V vs byte 15 ≈ 6.98-7.01 V. Daytime discharge test 2026-11-07: formula within 0.03 V at 62 °F, +0.09 V at 47 °F (reads high when cold?); unexplained blinking red LED on main board at 6.45 V, not reflected in any packet byte; rain counter (byte 13) resets to 0 on power-up (docs/protocol.md).
 3. Identify the Oracle black box -> display RJ11 link (power, RS-485, RS-232 or TTL) with a meter, then capture it. Table in docs/hardware.md "Identifying the link with a meter".
 4. Measure the IP-100 RJ11 port (nothing plugged in); only plug the black box in if pinouts match. Check whether the IP-100's internal radio is a socketed XBee.
 5. Which handshake lines the station controller uses: answered by the station firmware's status messages once installed (owner has no logic analyzer). Field visits are costly: do fiddly work indoors and prefer firmware/remote diagnostics over ladder trips.

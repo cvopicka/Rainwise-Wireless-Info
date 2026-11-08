@@ -76,7 +76,7 @@ Status key: ✅ confirmed against the IP-100 · ⚠️ partly understood · ❓ 
 | 07-08 | Barometric pressure                      | 16-bit, inHg × 1000                                   |  `64 9B`   | 25.755 inHg |   ✅    |
 | 09-10 | Wind speed                               | 16-bit, mph × 10, live                                |  `00 1E`   | 3.0 mph     |   ✅    |
 | 11-12 | Wind direction                           | 16-bit, degrees, live                                 |  `00 2D`   | 45°         |   ✅    |
-|  13   | Rain tip counter                         | 8-bit, 0.01 in per tip, wraps at 256                  |    `3D`    | 61          |   ✅    |
+|  13   | Rain tip counter                         | 8-bit, 0.01 in/tip, wraps at 256, resets on power-up  |    `3D`    | 61          |   ✅    |
 |  14   | Rain check byte                          | 255 − byte 13                                         |    `C2`    |             |   ✅    |
 |  15   | Station voltage (as shown by the IP-100) | 8-bit, V ≈ 0.0291 × value + 0.20                      |    `EB`    | 7.04 V      |   ✅    |
 |  16   | Status flags                             | bit 0 = low-voltage flag? (`04` normal, `05` flagged) |    `04`    |             |   ⚠️   |
