@@ -353,6 +353,7 @@ void handleCommand(const uint8_t *c) {
     if (c[9] != mode) {
       mode = c[9];
       saveMode();
+      serviceHandshake();  // move CTS now, so the reply status shows the new level
     }
   } else if (c[8] != CMD_STATUS) {
     return;
