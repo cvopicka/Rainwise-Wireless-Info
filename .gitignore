@@ -25,3 +25,7 @@ Rainwise MK3-LR data stream - Claude.pdf
 
 # LoRa firmware private settings (command key)
 lora/rainwise_lora/local_config.h
+
+# Local serial-port shortcuts (symlinks to /dev/serial/by-id, machine-specific)
+/station
+/receiver*
