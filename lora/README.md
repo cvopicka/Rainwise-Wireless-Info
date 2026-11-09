@@ -87,7 +87,36 @@ How to read it:
 
 Commands, typed in a receiver's text mode: `0` / `1` / `2` set the handshake mode, `s` asks for status now. The receiver sends the command just after it next hears the station (the station listens between its own transmissions), and the station's reply shows the new mode and the command's sequence number under "last command". If nothing confirms it within a minute, type it again.
 
+Rain-fix keys (next section): `r` rain report, `R` rain resync, `O` rain fix on/off. `R` and `O` must be pressed twice within 5 s.
+
 Both boards need the same key in `rainwise_lora/local_config.h` (copy `local_config.h.example`; generate a key with `python3 -c "import secrets; print(hex(secrets.randbits(32)))"`). Without the file, the station ignores commands and receivers refuse to send them; the status message says "commands OFF".
+
+## Rain fix for the Oracle display (receiver setting)
+
+The station's rain counter (byte 13) restarts at 0 every time the station powers up. The IP-100 ignores that, but the Oracle display counts the drop as up to 2.55 in of rain; two station power cycles in November 2026 added several inches to its totals ([docs/protocol.md](../docs/protocol.md)). The station still sends exactly what its controller sends. The fix is a **per-board setting on the receiver that feeds the Oracle**, saved in its flash, so every receiver runs the same firmware and any one (the spare too) can take that job.
+
+With the rain fix on, the receiver keeps its own continuous rain counter and sends that to UART1 (the display), with byte 14 (255 − counter) and the CRC recomputed. Its USB output stays the station's original bytes, for the logger.
+
+- Normal packets add (new − old) mod 256 tips, so counter wraps and real rain are kept.
+- After a gap of more than 30 s with no packets, a counter that went down is a station restart: only the tips since the restart (the new value) are added. Rain that falls during a radio outage is still counted.
+- Without a gap, more than 10 tips in one packet (18 in/h) is also taken as a restart.
+- The counter is saved in flash, so a power cut at the Oracle end doesn't cause a jump either.
+
+Limits: a restart within 30 s of the last packet, while the counter was at 246 or above, still adds up to 0.10 in; a real counter wrap during an outage longer than 30 s loses those tips. Both should be rare.
+
+**Turning it on (once, on the bench):** in the Oracle receiver's text mode press `O` twice. It starts level with the station's counter, so turning it on makes no jump. Only one board should have it on.
+
+**Checking it:** `r` on the Oracle receiver prints its state; `r` on any other receiver asks it by radio, and the reply comes back after the next station packet:
+
+```
+rain fix: on, display counter 66, station counter 3, offset 63, station restarts seen 2, last rain command 5, up 86400 s
+```
+
+The offset is how far the display's counter has moved away from the station's; it does no harm, because the Oracle only uses the differences.
+
+**Resync (`R` twice):** sets the display counter back to the station's. The Oracle will count the step (the offset) as rain, so do it right before clearing the Oracle's rain totals, e.g. at the 1 January reset: press `R` twice (on any receiver), wait for the confirming rain report, then clear the Oracle's totals. Works by radio like `r`.
+
+Remote rain commands use the same key as station commands. The station ignores them.
 
 ## Building and flashing (PlatformIO in VS Code)
 
@@ -117,7 +146,8 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 4. **UART1 output.** Connect a 3.3 V USB-serial adapter to R1's TX1 and GND, open it at 9600 8N1, and check that the same 32-byte packets come out. This is the output that will feed the Oracle line driver or a local XBee.
 5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. A receiver-configured XBee outputs at **9600**, so build S with `STATION_UART_BAUD` set to 9600 for this test. Check that both sides are 3.3 V logic first (**verify**).
 6. **Status and commands, no station needed.** With S running and R1 in text mode, a status line should appear every minute (`SLEEP_RQ high (asleep)` with nothing connected, because of the pull-up). Briefly connect S's J6 SDA to GND with a jumper: SLEEP_RQ shows `low (awake)`, and removing the jumper counts one wake. Type `1`, `2`, `0` on R1 and check that each reply shows the new mode and command number; measure J6 SCL (CTS) with the VTVM: low in cts-low, floating in released, following SDA in mirror. J7 pin 2 (TX1, ON/SLEEP) is the opposite: about 3.3 V in cts-low, floating in released, and in mirror 0 V with SDA open (asleep) and 3.3 V with SDA jumpered to GND (awake). Power-cycle S and check that the mode was remembered.
-7. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
+7. **Rain fix.** On the receiver that will feed the Oracle, press `O` twice (rain fix on), then run `python lora/replay_packets.py ports/station rainwise_log.csv --tip-every 3 --restart-after 20`. That adds a fake tip every 3 packets and, after 20 packets, pauses 40 s and starts the counter again at 0. In that receiver's text mode the `rain raw->out` numbers should go up together, then after the pause the raw counter drops to 0 while the out counter carries on without a jump. `r` on another receiver should show `station restarts seen 1`. Then try `R` twice and check that the out counter equals the raw one again. Last, check the UART1 bytes with the 3.3 V USB-serial adapter (step 4): byte 13 is the out counter, and the CRC must be valid.
+8. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
 
 ## Station wiring: XBee breakout to RAK19003
 

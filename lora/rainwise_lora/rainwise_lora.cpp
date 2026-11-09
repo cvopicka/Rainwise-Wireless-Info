@@ -13,6 +13,9 @@
                    writes the 32 raw bytes to USB and UART1 at 9600 8N1, the
                    same byte stream an XBee in transparent mode (AP=0) gives.
                    In text mode it shows station status and sends commands.
+                   Optional per-board "rain fix" (saved setting) keeps the
+                   rain counter on UART1 continuous across station restarts,
+                   for the Oracle display.
 
   Target: RAKwireless RAK4631 (nRF52840 + SX1262) on a RAK19003 base,
   RAK nRF52 Arduino core + RadioLib. Board-specific pins are all in the
@@ -103,16 +106,25 @@ const uint8_t HEADER[3] = {0x33, 0x80, 0x00};
 //   13-14 average awake ms  15-16 longest awake ms  17-20 weather packets
 //   received (total)  21-24 UART bytes received (total)  25-26 TX errors
 //   27-28 packets dropped  29-30 CRC
-// Command, receiver -> station:
+// Command, receiver -> station (or -> a receiver with the rain fix on):
 //   0-2 "RWC"  3 version  4-7 COMMAND_KEY  8 command  9 argument
 //   10 sequence number  11-12 CRC
+// Rain report, receiver with the rain fix on -> other receivers, after a
+// rain command:
+//   0-2 "RWR"  3 version  4 flags (bit0 rain fix on, bit1 baseline known)
+//   5 counter sent to the display  6 last station counter  7-8 station
+//   restarts detected since boot  9 last command seq  10-13 uptime s  14-15 CRC
 const uint8_t MSG_VERSION = 1;
 const uint8_t STATUS_LEN = 31;
 const uint8_t CMD_LEN = 13;
+const uint8_t RAIN_LEN = 16;
 const uint8_t STATUS_MAGIC[3] = {'R', 'W', 'S'};
 const uint8_t CMD_MAGIC[3] = {'R', 'W', 'C'};
-const uint8_t CMD_SET_MODE = 1;  // argument: handshake mode
-const uint8_t CMD_STATUS = 2;    // send a status message now
+const uint8_t RAIN_MAGIC[3] = {'R', 'W', 'R'};
+const uint8_t CMD_SET_MODE = 1;     // station: argument = handshake mode
+const uint8_t CMD_STATUS = 2;       // station: send a status message now
+const uint8_t CMD_RAIN_STATUS = 3;  // rain-fix receiver: send a rain report
+const uint8_t CMD_RAIN_RESYNC = 4;  // rain-fix receiver: counter = station's again
 const uint32_t STATUS_INTERVAL_MS = 60000;
 
 // Station handshake modes (what CTS does), settable over the air.
@@ -245,10 +257,31 @@ void setupRadio() {
   radio.setPacketReceivedAction(onRadioIrq);  // same DIO1 line signals TX done
 }
 
+using namespace Adafruit_LittleFS_Namespace;
+
+// Small settings files in the nRF52's internal flash (LittleFS).
+bool loadByte(const char *path, uint8_t &value) {
+  File f(InternalFS);
+  bool ok = false;
+  if (f.open(path, FILE_O_READ)) {
+    ok = f.read(&value, 1) == 1;
+    f.close();
+  }
+  return ok;
+}
+
+void saveByte(const char *path, uint8_t value) {
+  InternalFS.remove(path);  // FILE_O_WRITE appends
+  File f(InternalFS);
+  if (f.open(path, FILE_O_WRITE)) {
+    f.write(&value, 1);
+    f.close();
+  }
+}
+
 // ===================== Station =====================
 #if ROLE == ROLE_STATION
 
-using namespace Adafruit_LittleFS_Namespace;
 const char *const MODE_FILE = "/hsmode";
 
 Framer uartFramer, usbFramer;
@@ -272,22 +305,11 @@ uint32_t awakeTotalMs = 0;
 
 // The handshake mode survives power cycles, so a mode set over the air sticks.
 void loadMode() {
-  File f(InternalFS);
   uint8_t m;
-  if (f.open(MODE_FILE, FILE_O_READ)) {
-    if (f.read(&m, 1) == 1 && m <= HS_RELEASED) mode = m;
-    f.close();
-  }
+  if (loadByte(MODE_FILE, m) && m <= HS_RELEASED) mode = m;
 }
 
-void saveMode() {
-  InternalFS.remove(MODE_FILE);  // FILE_O_WRITE appends
-  File f(InternalFS);
-  if (f.open(MODE_FILE, FILE_O_WRITE)) {
-    f.write(&mode, 1);
-    f.close();
-  }
-}
+void saveMode() { saveByte(MODE_FILE, mode); }
 
 void queuePacket(const uint8_t *p, const char *src) {
   packetsIn++;
@@ -502,6 +524,125 @@ uint8_t cmd[CMD_LEN];
 bool cmdPending = false;
 uint32_t cmdQueuedMs = 0, lastHeardMs = 0;
 
+// ---- Rain-counter fix (a per-board setting, off by default) ----
+// The station's rain counter (byte 13) restarts at 0 whenever the station
+// powers up. The IP-100 ignores that; the Oracle display counts the drop as
+// (new - old) mod 256 tips of rain (docs/protocol.md). With the fix on, this
+// receiver keeps its own continuous counter and sends that to UART1 (the
+// display) in byte 13, with byte 14 and the CRC recomputed. USB output stays
+// the station's original bytes, for the logger.
+//   Normal packets: add (new - old) mod 256 tips.
+//   Station restart: after a gap of more than RAIN_GAP_MS a counter that went
+//   down is a restart (count only the tips since it, i.e. the new value);
+//   without a gap, more than RAIN_MAX_TIPS in one packet is a restart (10 tips
+//   in about 2 s would be 18 in/h).
+// The counter is saved in flash, so a power cut doesn't make a jump either.
+const char *const RX_CONFIG_FILE = "/rxcfg";  // bit0: rain fix on
+const char *const RAIN_FILE = "/rainout";
+const uint32_t RAIN_GAP_MS = 30000;
+const uint8_t RAIN_MAX_TIPS = 10;
+
+bool rainFix = false;
+uint8_t rainOut = 0;        // counter sent to the display
+bool rainOutValid = false;  // false until the first packet sets it
+bool rainBaseline = false;  // a station counter has been seen since boot
+bool resyncPending = false;
+uint8_t rainLastRaw = 0;
+uint32_t rainLastMs = 0;
+uint16_t rainRestarts = 0;
+uint8_t lastRainCmdSeq = 0;
+uint8_t rainReport[RAIN_LEN];
+bool rainReportPending = false;
+
+void applyRainFix(uint8_t *p) {
+  uint8_t raw = p[12];  // byte 13 (1-based) is index 12
+  uint32_t now = millis();
+  if (!rainOutValid || resyncPending) {
+    rainOut = raw;  // start from (or go back to) the station's own count
+    rainOutValid = true;
+    resyncPending = false;
+    saveByte(RAIN_FILE, rainOut);
+  } else if (rainBaseline) {
+    uint8_t d = raw - rainLastRaw;  // mod 256
+    bool longGap = now - rainLastMs > RAIN_GAP_MS;
+    bool restart = longGap ? raw < rainLastRaw : d > RAIN_MAX_TIPS;
+    uint8_t add = d;
+    if (restart) {
+      rainRestarts++;
+      add = (longGap || raw <= RAIN_MAX_TIPS) ? raw : 0;
+    }
+    if (add) {
+      rainOut += add;
+      saveByte(RAIN_FILE, rainOut);
+    }
+  }  // else: first packet since this board started; just take the baseline
+  rainLastRaw = raw;
+  rainLastMs = now;
+  rainBaseline = true;
+  p[12] = rainOut;
+  p[13] = 255 - rainOut;  // check byte (byte 14)
+  sealMessage(p, PACKET_LEN);
+}
+
+void printRainReport(const uint8_t *r) {
+  Serial.print("rain fix: ");
+  Serial.print(r[4] & 1 ? "on" : "OFF");
+  if (r[4] & 2) {
+    Serial.print(", display counter ");
+    Serial.print(r[5]);
+    Serial.print(", station counter ");
+    Serial.print(r[6]);
+    Serial.print(", offset ");
+    Serial.print((uint8_t)(r[5] - r[6]));
+  } else {
+    Serial.print(", no station packet yet");
+  }
+  Serial.print(", station restarts seen ");
+  Serial.print(get16(r + 7));
+  Serial.print(", last rain command ");
+  Serial.print(r[9]);
+  Serial.print(", up ");
+  Serial.print(get32(r + 10));
+  Serial.print(" s");
+}
+
+void buildRainReport(uint8_t *r) {
+  memcpy(r, RAIN_MAGIC, 3);
+  r[3] = MSG_VERSION;
+  r[4] = (rainFix ? 1 : 0) | (rainBaseline && rainOutValid ? 2 : 0);
+  r[5] = rainOut;
+  r[6] = rainLastRaw;
+  put16(r + 7, rainRestarts);
+  r[9] = lastRainCmdSeq;
+  put32(r + 10, millis() / 1000);
+  sealMessage(r, RAIN_LEN);
+}
+
+void doRainResync() {
+  if (rainBaseline) {
+    rainOut = rainLastRaw;
+    rainOutValid = true;
+    saveByte(RAIN_FILE, rainOut);
+  } else {
+    resyncPending = true;  // apply to the next station packet
+  }
+}
+
+// A rain command heard over the air (sent by another receiver).
+void handleRainCommand(const uint8_t *c) {
+  if (!rainFix || !COMMANDS_ENABLED || get32(c + 4) != (uint32_t)COMMAND_KEY) return;
+  if (c[8] == CMD_RAIN_RESYNC) doRainResync();
+  else if (c[8] != CMD_RAIN_STATUS) return;
+  lastRainCmdSeq = c[10];
+  buildRainReport(rainReport);
+  rainReportPending = true;  // sent right after the next station transmission
+  if (debugText) {
+    Serial.print(c[8] == CMD_RAIN_RESYNC ? "rain resync" : "rain status");
+    Serial.print(" by radio, seq ");
+    Serial.println(c[10]);
+  }
+}
+
 void printStatus(const uint8_t *s) {
   uint8_t m = s[4] <= HS_RELEASED ? s[4] : 0;
   Serial.print("status: up ");
@@ -552,21 +693,92 @@ void queueCommand(uint8_t command, uint8_t arg) {
 }
 
 // The station listens between its own transmissions, so send right after
-// hearing it (or after 3 s of silence, when it is only listening).
+// hearing it (or after 3 s of silence, when it is only listening). A command
+// goes first; a rain report waits for the next turn.
 void sendCommandIfDue(bool justHeard) {
-  if (!cmdPending || (!justHeard && millis() - lastHeardMs < 3000 &&
-                      millis() - cmdQueuedMs < 3000))
-    return;
-  cmdPending = false;
-  int16_t state = radio.transmit(cmd, CMD_LEN);
+  if (!cmdPending && !rainReportPending) return;
+  if (!justHeard && millis() - lastHeardMs < 3000 && millis() - cmdQueuedMs < 3000) return;
+  const uint8_t *msg = cmdPending ? cmd : rainReport;
+  size_t len = cmdPending ? CMD_LEN : RAIN_LEN;
+  int16_t state = radio.transmit(msg, len);
   radioIrq = false;
-  Serial.print(state == RADIOLIB_ERR_NONE ? "command sent, seq " : "command send failed, seq ");
-  Serial.println(cmd[10]);
+  if (cmdPending) {
+    cmdPending = false;
+    Serial.print(state == RADIOLIB_ERR_NONE ? "command sent, seq " : "command send failed, seq ");
+    Serial.println(cmd[10]);
+  } else {
+    rainReportPending = false;
+    if (debugText) Serial.println(state == RADIOLIB_ERR_NONE ? "rain report sent" : "rain report send failed");
+  }
   radio.startReceive();
+}
+
+// Keys that change something important must be pressed twice within 5 s.
+char armedKey = 0;
+uint32_t armedMs = 0;
+
+bool confirmed(char k, const char *warning) {
+  if (armedKey == k && millis() - armedMs < 5000) {
+    armedKey = 0;
+    return true;
+  }
+  armedKey = k;
+  armedMs = millis();
+  Serial.println(warning);
+  return false;
+}
+
+void handleKey(char k) {
+  if (k == 'd') {
+    debugText = !debugText;
+    if (debugText)
+      Serial.println("text mode: 0/1/2 set station handshake, s = status, r = rain report, "
+                     "R = rain resync, O = rain fix on/off, d = raw");
+  } else if (!debugText) {
+    return;
+  } else if (k >= '0' && k <= '2') {
+    queueCommand(CMD_SET_MODE, k - '0');
+  } else if (k == 's') {
+    queueCommand(CMD_STATUS, 0);
+  } else if (k == 'r') {
+    if (rainFix) {
+      buildRainReport(rainReport);
+      printRainReport(rainReport);
+      Serial.println(" (this board)");
+    } else {
+      queueCommand(CMD_RAIN_STATUS, 0);  // ask the rain-fix receiver by radio
+    }
+  } else if (k == 'R') {
+    if (!confirmed('R', "press R again within 5 s to resync the display's rain counter to the "
+                        "station's. The display will count the difference as rain, so do it "
+                        "just before clearing the display's rain totals."))
+      return;
+    if (rainFix) {
+      doRainResync();
+      Serial.println(resyncPending ? "rain resync: applies to the next station packet"
+                                   : "rain resync done on this board");
+    } else {
+      queueCommand(CMD_RAIN_RESYNC, 0);
+    }
+  } else if (k == 'O') {
+    if (!confirmed('O', rainFix ? "press O again within 5 s to turn the rain fix OFF on this board "
+                                  "(the display then gets the station's counter again)"
+                                : "press O again within 5 s to turn the rain fix ON on this board "
+                                  "(only the board feeding the Oracle display needs it)"))
+      return;
+    rainFix = !rainFix;
+    saveByte(RX_CONFIG_FILE, rainFix ? 1 : 0);
+    if (rainFix) resyncPending = true;  // start level with the station: no jump
+    Serial.println(rainFix ? "rain fix ON (saved)" : "rain fix OFF (saved)");
+  }
 }
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
+  InternalFS.begin();
+  uint8_t cfg = 0;
+  rainFix = loadByte(RX_CONFIG_FILE, cfg) && (cfg & 1);
+  rainOutValid = loadByte(RAIN_FILE, rainOut);
   Serial.begin(115200);  // USB CDC to the NAS/PC: raw packets, like the XBee breakout
   Serial1.begin(RECEIVER_UART_BAUD);  // UART1 TX1 -> display line driver / local XBee
   setupRadio();
@@ -576,19 +788,8 @@ void setup() {
 
 void loop() {
   serviceLed();
-  // 'd' switches between raw bytes and readable text. In text mode:
-  // '0' mirror, '1' CTS low, '2' CTS released (station handshake), 's' status now.
-  while (Serial.available()) {
-    char k = Serial.read();
-    if (k == 'd') {
-      debugText = !debugText;
-      if (debugText) Serial.println("text mode: 0/1/2 set station handshake, s = status, d = raw");
-    } else if (debugText && k >= '0' && k <= '2') {
-      queueCommand(CMD_SET_MODE, k - '0');
-    } else if (debugText && k == 's') {
-      queueCommand(CMD_STATUS, 0);
-    }
-  }
+  // 'd' switches between raw bytes and readable text; the other keys work in text mode.
+  while (Serial.available()) handleKey(Serial.read());
 
   if (!radioIrq) {
     sendCommandIfDue(false);
@@ -599,35 +800,51 @@ void loop() {
 
   uint8_t p[PACKET_LEN];
   size_t len = radio.getPacketLength();
-  int16_t state = (len == PACKET_LEN || len == STATUS_LEN || len == CMD_LEN)
+  int16_t state = (len == PACKET_LEN || len == STATUS_LEN || len == CMD_LEN || len == RAIN_LEN)
                       ? radio.readData(p, len)
                       : RADIOLIB_ERR_PACKET_TOO_LONG;
   bool rxOk = state == RADIOLIB_ERR_NONE;
   bool ok = rxOk && len == PACKET_LEN && packetOk(p);
   bool status = rxOk && len == STATUS_LEN && messageOk(p, STATUS_LEN, STATUS_MAGIC);
   bool otherCmd = rxOk && len == CMD_LEN && messageOk(p, CMD_LEN, CMD_MAGIC);
+  bool rainMsg = rxOk && len == RAIN_LEN && messageOk(p, RAIN_LEN, RAIN_MAGIC);
   if (ok) good++;
-  else if (!status && !otherCmd) bad++;
+  else if (!status && !otherCmd && !rainMsg) bad++;
+  if (otherCmd) handleRainCommand(p);
 
   if (ok) {
-    Serial1.write(p, PACKET_LEN);
-    if (!debugText) Serial.write(p, PACKET_LEN);
+    if (!debugText) Serial.write(p, PACKET_LEN);  // USB: the station's bytes
+    if (rainFix) {
+      uint8_t out[PACKET_LEN];
+      memcpy(out, p, PACKET_LEN);
+      applyRainFix(out);
+      Serial1.write(out, PACKET_LEN);  // UART1 (display): continuous rain counter
+    } else {
+      Serial1.write(p, PACKET_LEN);
+    }
     blink();
   }
   if (debugText && !otherCmd) {
     if (status) printStatus(p);
+    else if (rainMsg) printRainReport(p);
     else Serial.print(ok ? "ok  " : "bad ");
     Serial.print(" | rssi ");
     Serial.print(radio.getRSSI());
     Serial.print(" snr ");
     Serial.print(radio.getSNR());
-    if (!status) {
+    if (!status && !rainMsg) {
       Serial.print(" good ");
       Serial.print(good);
       Serial.print(" bad ");
       Serial.print(bad);
       Serial.print(" len ");
       Serial.print(len);
+    }
+    if (ok && rainFix) {
+      Serial.print(" rain ");
+      Serial.print(rainLastRaw);
+      Serial.print("->");
+      Serial.print(rainOut);
     }
     if (ok) {
       Serial.print(": ");
