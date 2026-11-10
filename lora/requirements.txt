@@ -1,0 +1,6 @@
+# Python packages for the bench replay script (replay_packets.py).
+# The firmware itself is built by PlatformIO, which fetches its own
+# toolchain and libraries from platformio.ini; nothing here is needed for it.
+# Install: pip install -r lora/requirements.txt
+# pyserial: https://pyserial.readthedocs.io/
+pyserial==3.5

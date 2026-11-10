@@ -97,7 +97,7 @@ How each field was confirmed, with raw captures and the IP-100 comparison, is in
 Reads the XBee breakout over USB, checks the CRC, decodes the known fields, polls the IP-100 XML at the same moment, and writes one CSV row per packet. Includes a `changed_bytes` column listing which byte positions differ from the previous packet.
 
 ```
-pip install pyserial
+pip install -r requirements.txt               # pyserial
 python rainwise_logger.py --test                 # decode the built-in sample
 python rainwise_logger.py --port COM5 --xml-url http://<ip100-address>/status.xml
 python rainwise_logger.py --port COM5 --no-xml   # radio only

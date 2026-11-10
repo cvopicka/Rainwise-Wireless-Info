@@ -131,7 +131,7 @@ PlatformIO downloads the compiler, the Adafruit nRF52 framework, the upload tool
    pio device monitor               # 115200; keys are sent as you type
    ```
    `pio device list` shows the board's port, usually `/dev/ttyACM0`. Add `--upload-port` if several boards are plugged in. Upload resets the board into its bootloader automatically ("1200 bps touch"). If that fails, double-press the reset button and try again.
-3. For the replay script: `pip install pyserial` ([pyserial][pyserial]).
+3. For the replay script: `pip install -r requirements.txt` from `lora/` (just [pyserial][pyserial]).
 4. For remote commands: create `rainwise_lora/local_config.h` from the example (see above) before building. Every board needs the same file.
 
 Uploading replaces Meshtastic but keeps RAK's bootloader. To go back, drag the Meshtastic UF2 onto the board's USB drive ([RAK4631 Quick Start][rak4631-qs]).

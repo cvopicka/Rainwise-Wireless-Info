@@ -7,7 +7,7 @@ checksum, decodes the known fields, grabs the IP-100 status XML at the same
 moment, and writes everything to a CSV so unknown bytes can be matched up
 against real values.
 
-Requires:  pip install pyserial
+Requires:  pip install -r requirements.txt  (pyserial)
 
 Usage examples:
   python rainwise_logger.py --port COM5                 (Windows)

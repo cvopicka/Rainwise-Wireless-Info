@@ -1,0 +1,6 @@
+# Python packages for the PC tools in this repo:
+#   rainwise_logger.py, rainwise/rainwise_service.py, lora/replay_packets.py
+# solar/solar_model.py uses only the standard library.
+# Install: pip install -r requirements.txt  (Python 3.8 or newer)
+# pyserial: https://pyserial.readthedocs.io/
+pyserial==3.5
