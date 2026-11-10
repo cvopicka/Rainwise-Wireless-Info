@@ -733,7 +733,7 @@ void handleKey(char k) {
     debugText = !debugText;
     if (debugText)
       Serial.println("text mode: 0/1/2 set station handshake, s = status, r = rain report, "
-                     "R = rain resync, O = rain fix on/off, d = raw");
+                     "R = rain resync, F = rain fix on/off, d = raw");
   } else if (!debugText) {
     return;
   } else if (k >= '0' && k <= '2') {
@@ -760,10 +760,10 @@ void handleKey(char k) {
     } else {
       queueCommand(CMD_RAIN_RESYNC, 0);
     }
-  } else if (k == 'O') {
-    if (!confirmed('O', rainFix ? "press O again within 5 s to turn the rain fix OFF on this board "
+  } else if (k == 'F') {
+    if (!confirmed('F', rainFix ? "press F again within 5 s to turn the rain fix OFF on this board "
                                   "(the display then gets the station's counter again)"
-                                : "press O again within 5 s to turn the rain fix ON on this board "
+                                : "press F again within 5 s to turn the rain fix ON on this board "
                                   "(only the board feeding the Oracle display needs it)"))
       return;
     rainFix = !rainFix;
