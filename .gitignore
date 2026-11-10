@@ -31,3 +31,4 @@ lora/rainwise_lora/local_config.h
 
 # Station photos (backgrounds show the property)
 /photos/
+.vscode/
