@@ -112,7 +112,9 @@ Runs on the TrueNAS NAS as a custom Docker app ([TrueNAS – installing custom a
 - `station_status`: metadata about the data. Each LoRa station's once-a-minute status message (uptime, so restarts show; handshake lines; packet, error and channel-busy counts) with the RSSI and SNR it arrived at. Kept forever unless `STATUS_KEEP_DAYS` is set; weather data is never deleted
 - `ip100_xml`: IP-100 readings once a minute, plus the full XML
 
-Inputs: one or more receivers on USB serial (LoRa receiver or XBee breakout; comma-separated `SERIAL_PORT`, e.g. one LoRa receiver per frequency), UDP port 5005 (one 32-byte packet per datagram), and the IP-100 XML. Each can be turned off in the compose file. Every 10 minutes the log shows counts per input (`serial`, `status`, `xml`, ...); weather arriving while `status` stops counting points at a problem.
+Inputs: one or more receivers on USB serial (LoRa receiver or XBee breakout; comma-separated `SERIAL_PORT`, e.g. one LoRa receiver per frequency) and the IP-100 XML. A UDP network input exists but is off by default. Each can be turned off in the compose file. Every 10 minutes the log shows counts per input (`serial`, `status`, `xml`, ...); weather arriving while `status` stops counting points at a problem.
+
+Full documentation (settings, tables, install and update, example queries, troubleshooting): [docs/nas-service.md](docs/nas-service.md).
 
 Only one program can open the serial port at a time. While testing on the PC, run the container with `SERIAL_PORT: ""` so it still logs the XML.
 

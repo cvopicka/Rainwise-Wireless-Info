@@ -1,4 +1,5 @@
 # Rainwise MK3-LR logger for TrueNAS (Apps > Discover > ⋮ menu > Install via YAML)
+# Documentation: docs/nas-service.md
 # https://apps.truenas.com/managing-apps/installing-custom-apps/
 #
 # Before installing:
@@ -23,7 +24,7 @@ services:
       SERIAL_PORT: /dev/rainwise           # name inside the container (devices: below); "" to disable
                                            # several receivers (one per frequency): /dev/rainwise,/dev/rainwise2
       BAUD: "9600"                         # ignored by the RAK's USB port; used by an XBee breakout
-      UDP_PORT: "5005"                     # network receiver (packets over UDP); "0" to disable
+      UDP_PORT: "0"                        # network receiver input, off (see docs/nas-service.md)
       XML_URL: http://192.168.1.1/status.xml   # your IP-100's address; "" to disable
       XML_INTERVAL: "60"
       DB_PATH: /data/rainwise.db
@@ -41,5 +42,5 @@ services:
       # - /dev/serial/by-id/usb-RAKwireless_WisCore_RAK4631_Board_<serial2>-if00:/dev/rainwise2
       # XBee USB breakout instead:
       # - /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0:/dev/rainwise
-    ports:
-      - "5005:5005/udp"
+    # ports:                              # only with UDP_PORT on
+    #   - "5005:5005/udp"

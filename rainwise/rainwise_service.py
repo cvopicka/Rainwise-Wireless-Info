@@ -6,8 +6,9 @@ Inputs (each optional, enable via environment variables):
   SERIAL_PORT   receiver(s) on USB: XBee breakout (/dev/ttyUSB0) or LoRa
                 receiver in raw mode (/dev/ttyACM0); several separated by
                 commas, e.g. one LoRa receiver per frequency   (empty = off)
-  UDP_PORT      packets forwarded by a future ESP32/LoRa receiver,
-                one 32-byte packet per datagram (raw bytes or hex text)  (0 = off)
+  UDP_PORT      packets from a network receiver, one 32-byte packet per
+                datagram (raw bytes or hex text). Off by default (0): it has
+                no sender check, and doesn't read station IDs or status.
   XML_URL       IP-100 status XML, polled every XML_INTERVAL seconds  (empty = off)
 
 Storage: SQLite at DB_PATH. Every packet keeps its raw hex, so history can be
@@ -34,7 +35,7 @@ from datetime import datetime, timezone
 # ------------------------------------------------------------------ config
 SERIAL_PORTS = [p.strip() for p in os.environ.get("SERIAL_PORT", "").split(",") if p.strip()]
 BAUD = int(os.environ.get("BAUD", "9600"))
-UDP_PORT = int(os.environ.get("UDP_PORT", "5005"))
+UDP_PORT = int(os.environ.get("UDP_PORT", "0"))
 XML_URL = os.environ.get("XML_URL", "").strip()
 XML_INTERVAL = float(os.environ.get("XML_INTERVAL", "60"))
 DB_PATH = os.environ.get("DB_PATH", "/data/rainwise.db")

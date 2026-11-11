@@ -1,6 +1,6 @@
 # Rainwise MK-III-LR wireless project
 
-Decoding and replacing the XBee radio link of a Rainwise MK-III-LR weather station (Oracle display, IP-100 network interface), and logging the data locally. README.md has the overview, byte map, tools and test plan; docs/protocol.md has the evidence for each field, raw samples and the sea-level pressure formula; docs/hardware.md has XBee settings, the display link, the LoRa plan and wiring diagrams. Read them before changing anything. Each doc keeps its own reference-style "References" section for what it cites.
+Decoding and replacing the XBee radio link of a Rainwise MK-III-LR weather station (Oracle display, IP-100 network interface), and logging the data locally. README.md has the overview, byte map, tools and test plan; docs/nas-service.md documents the NAS logging service; docs/protocol.md has the evidence for each field, raw samples and the sea-level pressure formula; docs/hardware.md has XBee settings, the display link, the LoRa plan and wiring diagrams. Read them before changing anything. Each doc keeps its own reference-style "References" section for what it cites.
 
 Private, machine-specific details (IP addresses, elevation, location, radio network ID) are in `CLAUDE.local.md`, which is gitignored. Never copy them into README.md, code defaults, or anything committed.
 
@@ -16,6 +16,7 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 | Path | What |
 | --- | --- |
 | `README.md` | Overview, byte map, tools, test plan (public) |
+| `docs/nas-service.md` | NAS logging service: data flow, settings, tables, TrueNAS install/update, example SQL (daily rain etc.), troubleshooting |
 | `docs/protocol.md` | Field notes / evidence per byte, raw samples, XML snapshot, sea-level pressure |
 | `docs/hardware.md` | XBee config, RJ11 display link, LoRa plan and options, wiring diagrams, FCC notes |
 | `rainwise_logger.py` | PC test logger: XBee serial -> CSV, CRC check, decode, polls IP-100 XML. `--test` runs a self-test |
