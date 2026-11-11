@@ -1,5 +1,20 @@
-// Copy to local_config.h (gitignored) and pick your own random key.
-// Every board that should send or accept remote commands needs the same key.
-// Without local_config.h the station ignores commands and receivers can't send them.
+// Copy to local_config.h (gitignored) and pick your own random values.
+// Every board of one station (the station and its receivers) needs the same file.
+
+// Remote-command key. Without it the station ignores commands and receivers
+// can't send them.
 //   python3 -c "import secrets; print(hex(secrets.randbits(32)))"
 #define COMMAND_KEY 0x00000000UL
+
+// Station ID, sent at the start of every radio message (like the XBee PAN ID).
+// Receivers only accept their own station's ID unless set to listen to all.
+// Pick one per station, not 0x0000 (the default without this file):
+//   python3 -c "import secrets; print(hex(secrets.randbelow(0xFFFE) + 1))"
+#ifndef STATION_ID  // a build flag can override it, e.g. for a test station
+#define STATION_ID 0x0000
+#endif
+
+// Optional: move this station's network to another frequency (MHz), 915.5-922.5.
+// A receiver hears only stations on its own frequency, so a logger that should
+// record several stations needs them all on the same one.
+// #define LORA_FREQ_MHZ 919.0

@@ -10,7 +10,9 @@ Inputs (each optional, enable via environment variables):
   XML_URL       IP-100 status XML, polled every XML_INTERVAL seconds  (empty = off)
 
 Storage: SQLite at DB_PATH. Every packet keeps its raw hex, so history can be
-re-decoded later once the unknown bytes are figured out.
+re-decoded later once the unknown bytes are figured out. Packets from a LoRa
+receiver carry the station ID they came from (station_id column); with the
+receiver set to listen to all stations, one database can log several.
 """
 
 import os
@@ -114,7 +116,16 @@ DECODED_COLS = list(decode(bytes([0x33, 0x80, 0x00] + [0] * 29)).keys())
 
 
 class Framer:
-    """Pulls CRC-valid 32-byte packets out of a byte stream, re-syncing as needed."""
+    """Finds 32-byte packets that start with the header and pass the CRC.
+    Re-syncs one byte at a time if a header match turns out to be bogus.
+
+    A LoRa receiver puts a 5-byte tag in front of each packet on USB: "RWP"
+    and the 2-byte station ID (big-endian). feed() yields (packet, station_id),
+    with station_id as 4 hex digits, or None for an untagged source such as
+    an XBee breakout. See lora/README.md, "Station ID"."""
+
+    TAG = b"RWP"
+    KEEP = 7  # a possible tag + partial header, kept while waiting for more bytes
 
     def __init__(self):
         self.buf = bytearray()
@@ -125,19 +136,23 @@ class Framer:
         while True:
             i = self.buf.find(HEADER)
             if i < 0:
-                del self.buf[:-2]
+                del self.buf[: -self.KEEP]
                 return
-            if i:
-                del self.buf[:i]
-            if len(self.buf) < PACKET_LEN:
+            if i > 5:
+                del self.buf[: i - 5]  # keep the 5 bytes where a tag would be
+                i = 5
+            sid = None
+            if i == 5 and self.buf[:3] == self.TAG:
+                sid = self.buf[3:5].hex().upper()
+            if len(self.buf) - i < PACKET_LEN:
                 return
-            pkt = bytes(self.buf[:PACKET_LEN])
+            pkt = bytes(self.buf[i : i + PACKET_LEN])
             if crc_ok(pkt):
-                del self.buf[:PACKET_LEN]
-                yield pkt
+                del self.buf[: i + PACKET_LEN]
+                yield pkt, sid
             else:
                 self.bad += 1
-                del self.buf[:1]
+                del self.buf[: i + 1]
 
 
 # ------------------------------------------------------------------ database
@@ -146,6 +161,7 @@ CREATE TABLE IF NOT EXISTS packets (
     id INTEGER PRIMARY KEY,
     ts_utc TEXT NOT NULL,
     source TEXT NOT NULL,
+    station_id TEXT,
     raw_hex TEXT NOT NULL,
     {", ".join(c + (" TEXT" if c.endswith("_hex") else " REAL") for c in DECODED_COLS)}
 );
@@ -182,6 +198,9 @@ def db_writer(q: queue.Queue):
     con = sqlite3.connect(DB_PATH)
     con.execute("PRAGMA journal_mode=WAL")
     con.executescript(SCHEMA)
+    # Databases made before station IDs existed: add the column.
+    if "station_id" not in [r[1] for r in con.execute("PRAGMA table_info(packets)")]:
+        con.execute("ALTER TABLE packets ADD COLUMN station_id TEXT")
     con.commit()
     log(f"database ready at {DB_PATH}")
     while True:
@@ -201,13 +220,14 @@ def db_writer(q: queue.Queue):
 stats = {"serial": 0, "udp": 0, "udp_bad": 0, "xml": 0, "xml_err": 0}
 
 
-def store_packet(q, pkt, source):
+def store_packet(q, pkt, source, station_id=None):
     q.put(
         (
             "packets",
             {
                 "ts_utc": utc_now(),
                 "source": source,
+                "station_id": station_id,
                 "raw_hex": pkt.hex(" ").upper(),
                 **decode(pkt),
             },
@@ -226,9 +246,9 @@ def serial_reader(q):
             ) as ser:
                 log(f"serial open: {SERIAL_PORT} @ {BAUD}")
                 while True:
-                    for pkt in framer.feed(ser.read(64)):
+                    for pkt, sid in framer.feed(ser.read(64)):
                         stats["serial"] += 1
-                        store_packet(q, pkt, "serial")
+                        store_packet(q, pkt, "serial", sid)
         except Exception as e:
             log(f"serial error ({e}); retrying in 10 s")
             time.sleep(10)

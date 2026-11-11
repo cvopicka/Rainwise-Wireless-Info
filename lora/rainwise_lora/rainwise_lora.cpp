@@ -79,8 +79,12 @@ SX1262 radio = new Module(LORA_NSS, LORA_DIO1, LORA_RESET, LORA_BUSY, loraSPI);
 // ---- Radio settings: must match on every board ----
 // 919.0 MHz sits in the gap between LoRaWAN US915 uplink (902.3-914.9) and
 // downlink (923.3-927.5) channels. 500 kHz bandwidth for FCC 15.247 digital
-// modulation (6 dB bandwidth >= 500 kHz; verify).
+// modulation (6 dB bandwidth >= 500 kHz; verify). local_config.h can move a
+// network to another frequency (keep 915.5-922.5 so the 500 kHz channel
+// stays inside the gap); a receiver hears only stations on its own frequency.
+#ifndef LORA_FREQ_MHZ
 #define LORA_FREQ_MHZ 919.0
+#endif
 #define LORA_BW_KHZ 500.0
 #define LORA_SF 10        // higher = longer range, longer airtime
 #define LORA_CR 5         // coding rate 4/5
@@ -92,6 +96,29 @@ SX1262 radio = new Module(LORA_NSS, LORA_DIO1, LORA_RESET, LORA_BUSY, loraSPI);
 // ---- Rainwise packet (README "Packet framing") ----
 const uint8_t PACKET_LEN = 32;
 const uint8_t HEADER[3] = {0x33, 0x80, 0x00};
+
+// ---- Station ID: the first 2 bytes of every radio message ----
+// Like the XBee's PAN ID: every message on the air starts with the ID of the
+// station it belongs to (big-endian), so a receiver knows for certain which
+// station a packet came from. Commands carry the ID of the station they are
+// for. Set STATION_ID in local_config.h; boards of one station all use the
+// same ID. It identifies, it doesn't authenticate: data is not encrypted.
+#ifndef STATION_ID
+#define STATION_ID 0x0000
+#endif
+const uint16_t MY_STATION_ID = STATION_ID;
+const uint8_t ID_LEN = 2;
+const uint8_t AIR_MAX = 34;  // ID + 32-byte weather packet, the longest message
+
+void putId(uint8_t *p, uint16_t id) {
+  p[0] = id >> 8;
+  p[1] = id & 0xFF;
+}
+uint16_t getId(const uint8_t *p) { return (uint16_t)p[0] << 8 | p[1]; }
+
+void printId(uint16_t id) {
+  for (int shift = 12; shift >= 0; shift -= 4) Serial.print((id >> shift) & 0xF, HEX);
+}
 
 // ---- Link messages (ours, never forwarded to the display or logger) ----
 // Different lengths from the 32-byte weather packet and their own headers, so
@@ -424,16 +451,22 @@ void handleCommand(const uint8_t *c) {
   }
 }
 
+// Only commands addressed to this station's ID are considered.
 void handleReceived() {
-  uint8_t c[CMD_LEN];
-  if (radio.getPacketLength() == CMD_LEN && radio.readData(c, CMD_LEN) == RADIOLIB_ERR_NONE &&
-      messageOk(c, CMD_LEN, CMD_MAGIC))
-    handleCommand(c);
+  uint8_t a[ID_LEN + CMD_LEN];
+  if (radio.getPacketLength() == sizeof(a) && radio.readData(a, sizeof(a)) == RADIOLIB_ERR_NONE &&
+      getId(a) == MY_STATION_ID && messageOk(a + ID_LEN, CMD_LEN, CMD_MAGIC))
+    handleCommand(a + ID_LEN);
 }
 
+// Sends the station ID followed by the message. startTransmit copies the
+// bytes into the radio's buffer, so the local array can go out of scope.
 bool startTx(const uint8_t *p, size_t len, RadioState next) {
+  uint8_t air[AIR_MAX];
+  putId(air, MY_STATION_ID);
+  memcpy(air + ID_LEN, p, len);
   radioIrq = false;
-  int16_t state = radio.startTransmit(p, len);
+  int16_t state = radio.startTransmit(air, ID_LEN + len);
   if (state != RADIOLIB_ERR_NONE) {
     txErrors++;
     if (debugText) {
@@ -459,11 +492,15 @@ void setup() {
   if (ON_SLEEP_PIN == PIN_SERIAL1_TX) releaseUart1Tx();
   serviceHandshake();  // drive ON/SLEEP now that TX1 is a GPIO
   setupRadio();
-  Serial.print("station ready, handshake ");
+  Serial.print("station ready, ID ");
+  printId(MY_STATION_ID);
+  Serial.print(", ");
+  Serial.print(LORA_FREQ_MHZ, 1);
+  Serial.print(" MHz, handshake ");
   Serial.print(MODE_NAMES[mode]);
   Serial.print(COMMANDS_ENABLED ? ", commands on" : ", commands OFF (no local_config.h)");
   Serial.print(", airtime per packet ms: ");
-  Serial.println(radio.getTimeOnAir(PACKET_LEN) / 1000.0);
+  Serial.println(radio.getTimeOnAir(ID_LEN + PACKET_LEN) / 1000.0);
   statusDue = true;  // announce a restart
 }
 
@@ -519,6 +556,8 @@ void loop() {
 #elif ROLE == ROLE_RECEIVER
 
 uint32_t good = 0, bad = 0;
+uint32_t otherGood = 0, otherHeard = 0;  // packets from other stations' IDs
+uint16_t lastOtherId = 0;
 uint8_t cmdSeq = 0;
 uint8_t cmd[CMD_LEN];
 bool cmdPending = false;
@@ -537,10 +576,20 @@ uint32_t cmdQueuedMs = 0, lastHeardMs = 0;
 //   without a gap, more than RAIN_MAX_TIPS in one packet is a restart (10 tips
 //   in about 2 s would be 18 in/h).
 // The counter is saved in flash, so a power cut doesn't make a jump either.
-const char *const RX_CONFIG_FILE = "/rxcfg";  // bit0: rain fix on
+const char *const RX_CONFIG_FILE = "/rxcfg";  // bit0: rain fix on, bit1: listen to all stations
 const char *const RAIN_FILE = "/rainout";
 const uint32_t RAIN_GAP_MS = 30000;
 const uint8_t RAIN_MAX_TIPS = 10;
+
+// ---- Listen to all stations (a per-board setting, off by default) ----
+// Off: only this board's own station (STATION_ID) is heard; everything else is
+// counted and dropped. On (for a logger such as the NAS): weather packets from
+// every station on this frequency also go to USB, each tagged with its
+// station ID. The display output (UART1), the rain fix and commands stay
+// with the board's own station either way.
+bool listenAll = false;
+
+void saveRxConfig();
 
 bool rainFix = false;
 uint8_t rainOut = 0;        // counter sent to the display
@@ -700,7 +749,10 @@ void sendCommandIfDue(bool justHeard) {
   if (!justHeard && millis() - lastHeardMs < 3000 && millis() - cmdQueuedMs < 3000) return;
   const uint8_t *msg = cmdPending ? cmd : rainReport;
   size_t len = cmdPending ? CMD_LEN : RAIN_LEN;
-  int16_t state = radio.transmit(msg, len);
+  uint8_t air[AIR_MAX];
+  putId(air, MY_STATION_ID);  // addressed to this board's own station
+  memcpy(air + ID_LEN, msg, len);
+  int16_t state = radio.transmit(air, ID_LEN + len);
   radioIrq = false;
   if (cmdPending) {
     cmdPending = false;
@@ -711,6 +763,45 @@ void sendCommandIfDue(bool justHeard) {
     if (debugText) Serial.println(state == RADIOLIB_ERR_NONE ? "rain report sent" : "rain report send failed");
   }
   radio.startReceive();
+}
+
+void saveRxConfig() { saveByte(RX_CONFIG_FILE, (rainFix ? 1 : 0) | (listenAll ? 2 : 0)); }
+
+void printSettings() {
+  Serial.print("this board: station ID ");
+  printId(MY_STATION_ID);
+  Serial.print(", ");
+  Serial.print(LORA_FREQ_MHZ, 1);
+  Serial.print(" MHz SF");
+  Serial.print(LORA_SF);
+  Serial.print(", listen to ");
+  Serial.print(listenAll ? "ALL stations" : "own station only");
+  Serial.print(", rain fix ");
+  Serial.print(rainFix ? "on" : "off");
+  Serial.print(", commands ");
+  Serial.print(COMMANDS_ENABLED ? "on" : "OFF");
+  Serial.print(", good ");
+  Serial.print(good);
+  Serial.print(" bad ");
+  Serial.print(bad);
+  Serial.print(", other stations: ");
+  Serial.print(otherHeard);
+  Serial.print(" messages heard");
+  if (otherHeard) {
+    Serial.print(" (last ID ");
+    printId(lastOtherId);
+    Serial.print(")");
+  }
+  Serial.println();
+}
+
+// USB output in raw mode: "RWP", the station ID (big-endian), then the 32-byte
+// packet. Loggers that only look for 33 80 00 skip the 5-byte tag; the NAS
+// service and rainwise_logger.py read it as the station ID.
+void writeUsbPacket(uint16_t id, const uint8_t *p) {
+  uint8_t tag[5] = {'R', 'W', 'P', (uint8_t)(id >> 8), (uint8_t)(id & 0xFF)};
+  Serial.write(tag, sizeof(tag));
+  Serial.write(p, PACKET_LEN);
 }
 
 // Keys that change something important must be pressed twice within 5 s.
@@ -732,8 +823,9 @@ void handleKey(char k) {
   if (k == 'd') {
     debugText = !debugText;
     if (debugText)
-      Serial.println("text mode: 0/1/2 set station handshake, s = status, r = rain report, "
-                     "R = rain resync, F = rain fix on/off, d = raw");
+      Serial.println("text mode: 0/1/2 set station handshake, s = status, i = this board's settings, "
+                     "r = rain report, R = rain resync, F = rain fix on/off, "
+                     "A = listen to all stations on/off, d = raw");
   } else if (!debugText) {
     return;
   } else if (k >= '0' && k <= '2') {
@@ -767,9 +859,19 @@ void handleKey(char k) {
                                   "(only the board feeding the Oracle display needs it)"))
       return;
     rainFix = !rainFix;
-    saveByte(RX_CONFIG_FILE, rainFix ? 1 : 0);
+    saveRxConfig();
     if (rainFix) resyncPending = true;  // start level with the station: no jump
     Serial.println(rainFix ? "rain fix ON (saved)" : "rain fix OFF (saved)");
+  } else if (k == 'A') {
+    if (!confirmed('A', listenAll ? "press A again within 5 s to hear ONLY this board's own station"
+                                  : "press A again within 5 s to also log OTHER stations' weather "
+                                    "packets on USB, tagged with their station ID (for a logger)"))
+      return;
+    listenAll = !listenAll;
+    saveRxConfig();
+    Serial.println(listenAll ? "listening to ALL stations (saved)" : "own station only (saved)");
+  } else if (k == 'i') {
+    printSettings();
   }
 }
 
@@ -777,7 +879,10 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   InternalFS.begin();
   uint8_t cfg = 0;
-  rainFix = loadByte(RX_CONFIG_FILE, cfg) && (cfg & 1);
+  if (loadByte(RX_CONFIG_FILE, cfg)) {
+    rainFix = cfg & 1;
+    listenAll = cfg & 2;
+  }
   rainOutValid = loadByte(RAIN_FILE, rainOut);
   Serial.begin(115200);  // USB CDC to the NAS/PC: raw packets, like the XBee breakout
   Serial1.begin(RECEIVER_UART_BAUD);  // UART1 TX1 -> display line driver / local XBee
@@ -796,35 +901,56 @@ void loop() {
     return;
   }
   radioIrq = false;
-  lastHeardMs = millis();
 
-  uint8_t p[PACKET_LEN];
-  size_t len = radio.getPacketLength();
-  int16_t state = (len == PACKET_LEN || len == STATUS_LEN || len == CMD_LEN || len == RAIN_LEN)
-                      ? radio.readData(p, len)
-                      : RADIOLIB_ERR_PACKET_TOO_LONG;
-  bool rxOk = state == RADIOLIB_ERR_NONE;
+  // Every message starts with a 2-byte station ID (see "Station ID" above).
+  uint8_t a[AIR_MAX];
+  size_t alen = radio.getPacketLength();
+  size_t len = alen > ID_LEN ? alen - ID_LEN : 0;
+  bool lenOk = len == PACKET_LEN || len == STATUS_LEN || len == CMD_LEN || len == RAIN_LEN;
+  bool rxOk = lenOk && radio.readData(a, alen) == RADIOLIB_ERR_NONE;
+  uint16_t id = rxOk ? getId(a) : 0;
+  const uint8_t *p = a + ID_LEN;
   bool ok = rxOk && len == PACKET_LEN && packetOk(p);
   bool status = rxOk && len == STATUS_LEN && messageOk(p, STATUS_LEN, STATUS_MAGIC);
   bool otherCmd = rxOk && len == CMD_LEN && messageOk(p, CMD_LEN, CMD_MAGIC);
   bool rainMsg = rxOk && len == RAIN_LEN && messageOk(p, RAIN_LEN, RAIN_MAGIC);
-  if (ok) good++;
-  else if (!status && !otherCmd && !rainMsg) bad++;
-  if (otherCmd) handleRainCommand(p);
+  bool valid = ok || status || otherCmd || rainMsg;
+  bool own = valid && id == MY_STATION_ID;
 
-  if (ok) {
-    if (!debugText) Serial.write(p, PACKET_LEN);  // USB: the station's bytes
-    if (rainFix) {
-      uint8_t out[PACKET_LEN];
-      memcpy(out, p, PACKET_LEN);
-      applyRainFix(out);
-      Serial1.write(out, PACKET_LEN);  // UART1 (display): continuous rain counter
-    } else {
-      Serial1.write(p, PACKET_LEN);
+  if (!valid) {
+    bad++;
+  } else if (!own) {
+    otherHeard++;
+    lastOtherId = id;
+    if (ok && listenAll) {
+      otherGood++;
+      if (!debugText) writeUsbPacket(id, p);  // USB only; never to the display
     }
-    blink();
+  } else {
+    lastHeardMs = millis();
+    if (ok) good++;
+    if (otherCmd) handleRainCommand(p);
+    if (ok) {
+      if (!debugText) writeUsbPacket(id, p);  // USB: the station's bytes, tagged
+      if (rainFix) {
+        uint8_t out[PACKET_LEN];
+        memcpy(out, p, PACKET_LEN);
+        applyRainFix(out);
+        Serial1.write(out, PACKET_LEN);  // UART1 (display): continuous rain counter
+      } else {
+        Serial1.write(p, PACKET_LEN);
+      }
+      blink();
+    }
   }
-  if (debugText && !otherCmd) {
+
+  // Text mode: own station's messages, plus other stations' when listening to all.
+  if (debugText && !otherCmd && (own || !valid || listenAll)) {
+    if (valid) {
+      Serial.print("[");
+      printId(id);
+      Serial.print(own ? "] " : " other] ");
+    }
     if (status) printStatus(p);
     else if (rainMsg) printRainReport(p);
     else Serial.print(ok ? "ok  " : "bad ");
@@ -834,13 +960,13 @@ void loop() {
     Serial.print(radio.getSNR());
     if (!status && !rainMsg) {
       Serial.print(" good ");
-      Serial.print(good);
+      Serial.print(own ? good : otherGood);
       Serial.print(" bad ");
       Serial.print(bad);
       Serial.print(" len ");
-      Serial.print(len);
+      Serial.print(alen);
     }
-    if (ok && rainFix) {
+    if (ok && own && rainFix) {
       Serial.print(" rain ");
       Serial.print(rainLastRaw);
       Serial.print("->");
@@ -852,9 +978,13 @@ void loop() {
     } else {
       Serial.println();
     }
+  } else if (debugText && valid && !own && otherHeard == 1) {
+    Serial.print("note: heard another station, ID ");
+    printId(id);
+    Serial.println(" (ignored; press i for counts, A to log it too)");
   }
   radio.startReceive();
-  sendCommandIfDue(true);
+  sendCommandIfDue(own);  // only our own station's transmission opens its listen window
 }
 
 #else

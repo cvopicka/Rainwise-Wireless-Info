@@ -148,7 +148,15 @@ def fetch_xml(url: str, timeout: float) -> dict:
 # ---------------------------------------------------------------- framing
 class Framer:
     """Finds 32-byte packets that start with the header and pass the CRC.
-    Re-syncs one byte at a time if a header match turns out to be bogus."""
+    Re-syncs one byte at a time if a header match turns out to be bogus.
+
+    A LoRa receiver puts a 5-byte tag in front of each packet on USB: "RWP"
+    and the 2-byte station ID (big-endian). feed() yields (packet, station_id),
+    with station_id as 4 hex digits, or None for an untagged source such as
+    an XBee breakout. See lora/README.md, "Station ID"."""
+
+    TAG = b"RWP"
+    KEEP = 7  # a possible tag + partial header, kept while waiting for more bytes
 
     def __init__(self):
         self.buf = bytearray()
@@ -159,19 +167,23 @@ class Framer:
         while True:
             i = self.buf.find(HEADER)
             if i < 0:
-                del self.buf[:-2]  # keep a possible partial header
+                del self.buf[: -self.KEEP]
                 return
-            if i:
-                del self.buf[:i]
-            if len(self.buf) < PACKET_LEN:
+            if i > 5:
+                del self.buf[: i - 5]  # keep the 5 bytes where a tag would be
+                i = 5
+            sid = None
+            if i == 5 and self.buf[:3] == self.TAG:
+                sid = self.buf[3:5].hex().upper()
+            if len(self.buf) - i < PACKET_LEN:
                 return
-            pkt = bytes(self.buf[:PACKET_LEN])
+            pkt = bytes(self.buf[i : i + PACKET_LEN])
             if crc_ok(pkt):
-                del self.buf[:PACKET_LEN]
-                yield pkt
+                del self.buf[: i + PACKET_LEN]
+                yield pkt, sid
             else:
                 self.bad += 1
-                del self.buf[:1]
+                del self.buf[: i + 1]
 
 
 # ---------------------------------------------------------------- main loop
@@ -182,9 +194,9 @@ def run(args):
         args.port, args.baud, bytesize=8, parity="N", stopbits=1, timeout=1
     )
     framer = Framer()
-    prev = None
+    prev = {}  # last packet per station, for changed_bytes
     fields = (
-        ["pc_time", "raw_hex", "changed_bytes"]
+        ["pc_time", "station_id", "raw_hex", "changed_bytes"]
         + list(decode(SAMPLE).keys())
         + ([] if args.no_xml else list(XML_FIELDS.keys()))
     )
@@ -207,17 +219,19 @@ def run(args):
         print(f"Logging {args.port} @ {args.baud} to {args.out}  (Ctrl+C to stop)")
         try:
             while True:
-                for pkt in framer.feed(ser.read(64)):
+                for pkt, sid in framer.feed(ser.read(64)):
                     now = dt.datetime.now().isoformat(timespec="seconds")
                     d = decode(pkt)
                     changed = ""
-                    if prev:
+                    last = prev.get(sid)
+                    if last:
                         changed = " ".join(
-                            str(n + 1) for n in range(PACKET_LEN) if pkt[n] != prev[n]
+                            str(n + 1) for n in range(PACKET_LEN) if pkt[n] != last[n]
                         )
-                    prev = pkt
+                    prev[sid] = pkt
                     row = {
                         "pc_time": now,
+                        "station_id": sid or "",
                         "raw_hex": pkt.hex(" ").upper(),
                         "changed_bytes": changed,
                         **d,
@@ -227,7 +241,8 @@ def run(args):
                     w.writerow(row)
                     f.flush()
                     line = (
-                        f"{now}  T={d['temp_f']:.1f}F  RH={d['humidity_pct']}%  "
+                        (f"[{sid}] " if sid else "")
+                        + f"{now}  T={d['temp_f']:.1f}F  RH={d['humidity_pct']}%  "
                         f"P={d['baro_inhg']:.3f} (SL {d['baro_sl_inhg']})  W={d['wind_mph']:.1f}@{d['wind_dir_deg']}  "
                         f"Vstn={d['station_v']:.2f}  V20={d['v20_21']:.2f}  V22={d['v22_23']:.2f}  "
                         f"low={d['low_v_flag']}  "
@@ -257,6 +272,19 @@ def self_test():
     )
     for k, v in decode(SAMPLE).items():
         print(f"  {k:14} {v}")
+    # Framer: untagged (XBee) and tagged (LoRa receiver) packets, split across
+    # reads at awkward places, with junk and a corrupted copy in between.
+    bad = bytearray(SAMPLE)
+    bad[5] ^= 1
+    stream = (
+        b"\x00junk" + SAMPLE + b"RWP\xab\xcd" + SAMPLE + bytes(bad) + b"RWP\x12\x34" + SAMPLE
+    )
+    for step in (1, 3, 7, 64):
+        fr, got = Framer(), []
+        for n in range(0, len(stream), step):
+            got += list(fr.feed(stream[n : n + step]))
+        ok = [sid for pkt, sid in got if pkt == SAMPLE] == [None, "ABCD", "1234"]
+        print(f"Framer, {step:2}-byte reads: {[sid for _, sid in got]}  -> {'OK' if ok else 'FAIL'}")
 
 
 if __name__ == "__main__":

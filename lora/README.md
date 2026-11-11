@@ -29,14 +29,14 @@ Every board must use the same values ([RadioLib][radiolib-sx1262]).
 | Power | +22 dBm | SX1262 maximum ([Semtech SX1262][sx1262]). Under the 15.247 limit of 1 W with antennas up to 6 dBi |
 | Current limit | 140 mA | Overcurrent protection for +22 dBm ([Semtech SX1262][sx1262] datasheet) |
 
-**Airtime** for one 32-byte packet at 500 kHz, from the Semtech formula ([Semtech forum][lora-toa]). The station also prints the exact value from RadioLib at startup. One packet goes out every 2 s.
+**Airtime** for one weather packet on the air (2-byte station ID + 32 bytes = 34 bytes) at 500 kHz, from the Semtech formula ([Semtech forum][lora-toa]). The station also prints the exact value from RadioLib at startup. One packet goes out every 2 s.
 
 | SF | Airtime | Share of the 2 s interval |
 | --- | --- | --- |
-| 7 | 18 ms | 0.9 % |
+| 7 | 19 ms | 1.0 % |
 | 9 | 62 ms | 3.1 % |
 | 10 | 113 ms | 5.7 % |
-| 11 | 206 ms | 10.3 % |
+| 11 | 226 ms | 11.3 % |
 | 12 | 412 ms | 20.6 % |
 
 Receiver sensitivity improves about 2.5 dB per SF step. Widening from 125 to 500 kHz costs about 6 dB (10·log10(4)), because the noise floor rises with bandwidth ([Semtech AN1200.22, LoRa Modulation Basics][an1200-22]). Pick the lowest SF that holds the link at the station's distance with margin; the range test below decides it. More airtime also means more transmit current at the station: at SF12 the transmitter is on 20 % of the time.
@@ -69,12 +69,32 @@ UART1 runs at `STATION_UART_BAUD` (115200) in the station role and `RECEIVER_UAR
 
 Which lines the controller really uses is unconfirmed (**verify**); the status message shows it. The station XBee has ON/SLEEP enabled (`D9` = 1), so the controller could be watching pin 13 instead of CTS; the station role drives both. The core's `Serial1.begin()` gives the UART control of TX1, so the firmware disconnects TX1 from the UART afterwards (`releaseUart1Tx()`, per the UARTE chapter of the [nRF52840 Product Specification][nrf52840-ps]) and uses it as a plain output. The status message doesn't report ON/SLEEP; check it with a meter on J7 pin 2 (bench step 6). The LED blink is non-blocking so the 64-byte UART receive buffer can't overflow at 115200.
 
+## Station ID and several stations
+
+Every message on the air starts with a 2-byte **station ID**, like the XBee's PAN ID. All boards of one station (the station and its receivers) are built with the same ID in `rainwise_lora/local_config.h`; a receiver accepts only its own station's ID, so it always knows which station a packet came from. Messages from other IDs are counted and dropped (a text-mode note shows the first one; `i` shows the count). Commands carry the ID of the station they are for, and the station ignores any other. The ID identifies, it doesn't authenticate: the data is not encrypted and anyone could copy an ID (commands are still protected by the command key).
+
+- **Pick an ID** per station: `python3 -c "import secrets; print(hex(secrets.randbelow(0xFFFE) + 1))"`, then set `STATION_ID` in `local_config.h` (see `local_config.h.example`). Without it the ID is `0000`, the same as anyone else who builds this firmware unchanged.
+- **Frequency:** `LORA_FREQ_MHZ` in `local_config.h` can move a station's network to another channel (915.5-922.5 MHz keeps the 500 kHz channel inside the gap between LoRaWAN uplink and downlink). Stations on different frequencies never collide. Two unsynchronised stations on one frequency lose roughly 1 packet in 9 to collisions (each is on the air about 6 % of the time), but a single receiver can only listen to one frequency.
+- **USB output is tagged:** in raw mode a receiver writes `RWP`, the station ID (2 bytes, big-endian), then the 32-byte packet. `rainwise_logger.py` and the NAS service read the tag into a `station_id` column; anything that only looks for `33 80 00` skips it. UART1 (the display and IP-100) gets plain 32-byte packets, as from an XBee.
+
+**Listening to several stations (a logger such as the NAS).** A per-board setting, saved in flash like the rain fix: in text mode press `A` twice. The receiver then also passes other stations' weather packets to USB, each tagged with its own ID, so one NAS database can log several stations (filter on `station_id`). The display output, the rain fix and commands stay with the board's own station. The stations must share the receiver's frequency. Press `A` twice again to go back to its own station only.
+
+`i` prints the board's settings: station ID, frequency, SF, listen-all, rain fix, packet counts and the last other station heard.
+
+**Testing with a second station on the bench:** flash a spare board as a station with another ID, which overrides the one in `local_config.h`:
+
+```
+PLATFORMIO_BUILD_FLAGS="-DSTATION_ID=0x1234" pio run -e station -t upload --upload-port <port>
+```
+
+Re-flash it normally afterwards.
+
 ## Status messages and remote commands
 
 The station sends a 31-byte status message (header `RWS`) at startup, every 60 s, and right after any command. It goes out between weather packets and never reaches the display or the logger: receivers forward only valid 32-byte `33 80 00` packets. In text mode (`d`) a receiver prints it like this:
 
 ```
-status: up 3600 s, handshake mirror, SLEEP_RQ high (asleep), CTS high, wakes 30 (avg 9 ms, max 12 ms),
+[ABCD] status: up 3600 s, handshake mirror, SLEEP_RQ high (asleep), CTS high, wakes 30 (avg 9 ms, max 12 ms),
 weather packets 1800, UART bytes 57600, TX errors 0, dropped 0, commands on, last command 4 | rssi -71 snr 9.5
 ```
 
@@ -87,9 +107,9 @@ How to read it:
 
 Commands, typed in a receiver's text mode: `0` / `1` / `2` set the handshake mode, `s` asks for status now. The receiver sends the command just after it next hears the station (the station listens between its own transmissions), and the station's reply shows the new mode and the command's sequence number under "last command". If nothing confirms it within a minute, type it again.
 
-Rain-fix keys (next section): `r` rain report, `R` rain resync, `F` rain fix on/off. `R` and `F` must be pressed twice within 5 s.
+Receiver settings keys: `i` this board's settings, `A` listen to all stations on/off (previous section), `r` rain report, `R` rain resync, `F` rain fix on/off (next section). `A`, `R` and `F` must be pressed twice within 5 s.
 
-Both boards need the same key in `rainwise_lora/local_config.h` (copy `local_config.h.example`; generate a key with `python3 -c "import secrets; print(hex(secrets.randbits(32)))"`). Without the file, the station ignores commands and receivers refuse to send them; the status message says "commands OFF".
+All boards of a station need the same key and station ID in `rainwise_lora/local_config.h` (copy `local_config.h.example`; generate a key with `python3 -c "import secrets; print(hex(secrets.randbits(32)))"`). Without the file, the station ignores commands and receivers refuse to send them; the status message says "commands OFF".
 
 ## Rain fix for the Oracle display (receiver setting)
 
@@ -109,7 +129,7 @@ Limits: a restart within 30 s of the last packet, while the counter was at 246 o
 **Checking it:** `r` on the Oracle receiver prints its state; `r` on any other receiver asks it by radio, and the reply comes back after the next station packet:
 
 ```
-rain fix: on, display counter 66, station counter 3, offset 63, station restarts seen 2, last rain command 5, up 86400 s
+[ABCD] rain fix: on, display counter 66, station counter 3, offset 63, station restarts seen 2, last rain command 5, up 86400 s
 ```
 
 The offset is how far the display's counter has moved away from the station's; it does no harm, because the Oracle only uses the differences.
@@ -132,7 +152,7 @@ PlatformIO downloads the compiler, the Adafruit nRF52 framework, the upload tool
    ```
    `pio device list` shows the board's port, usually `/dev/ttyACM0`. Add `--upload-port` if several boards are plugged in. Upload resets the board into its bootloader automatically ("1200 bps touch"). If that fails, double-press the reset button and try again.
 3. For the replay script: `pip install -r requirements.txt` from `lora/` (just [pyserial][pyserial]).
-4. For remote commands: create `rainwise_lora/local_config.h` from the example (see above) before building. Every board needs the same file.
+4. Create `rainwise_lora/local_config.h` from the example before building: it holds the command key and the station ID (see above). Every board of a station needs the same file.
 
 Uploading replaces Meshtastic but keeps RAK's bootloader. To go back, drag the Meshtastic UF2 onto the board's USB drive ([RAK4631 Quick Start][rak4631-qs]).
 
@@ -147,7 +167,8 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. A receiver-configured XBee outputs at **9600**, so build S with `STATION_UART_BAUD` set to 9600 for this test. Check that both sides are 3.3 V logic first (**verify**).
 6. **Status and commands, no station needed.** With S running and R1 in text mode, a status line should appear every minute (`SLEEP_RQ high (asleep)` with nothing connected, because of the pull-up). Briefly connect S's J6 SDA to GND with a jumper: SLEEP_RQ shows `low (awake)`, and removing the jumper counts one wake. Type `1`, `2`, `0` on R1 and check that each reply shows the new mode and command number; measure J6 SCL (CTS) with the VTVM: low in cts-low, floating in released, following SDA in mirror. J7 pin 2 (TX1, ON/SLEEP) is the opposite: about 3.3 V in cts-low, floating in released, and in mirror 0 V with SDA open (asleep) and 3.3 V with SDA jumpered to GND (awake). Power-cycle S and check that the mode was remembered.
 7. **Rain fix.** On the receiver that will feed the Oracle, press `F` twice (rain fix on), then run `python lora/replay_packets.py ports/station rainwise_log.csv --tip-every 3 --restart-after 20`. That adds a fake tip every 3 packets and, after 20 packets, pauses 40 s and starts the counter again at 0. In that receiver's text mode the `rain raw->out` numbers should go up together, then after the pause the raw counter drops to 0 while the out counter carries on without a jump. `r` on another receiver should show `station restarts seen 1`. Then try `R` twice and check that the out counter equals the raw one again. Last, check the UART1 bytes with the 3.3 V USB-serial adapter (step 4): byte 13 is the out counter, and the CRC must be valid.
-8. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
+8. **Station ID.** Flash one spare board as a second station with another ID (`PLATFORMIO_BUILD_FLAGS="-DSTATION_ID=0x1234"`, see [Station ID](#station-id-and-several-stations)) and replay into both stations. The receivers print only their own station's lines, plus one `note: heard another station, ID 1234`; `i` counts the others. Press `A` twice on one receiver: it now shows both, the other marked `other`. In raw mode, `rainwise_logger.py --no-xml` on that receiver shows each row with its `[ID]`. Re-flash the spare normally afterwards.
+9. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
 
 ## Station wiring: XBee breakout to RAK19003
 

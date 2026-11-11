@@ -23,7 +23,7 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 | `rainwise/docker-compose.yml` | TrueNAS custom app (public copy uses placeholders) |
 | `solar/solar_model.py` | Clear-sky sun model (NOAA + PVEducation formulas); location via SOLAR_LAT/LON/TZ env vars |
 | `diagrams/*.mmd`, `*.png` | Mermaid source + rendered wiring diagrams (also embedded in docs/hardware.md) |
-| `lora/` | RAK4631 RadioLib firmware (`rainwise_lora/rainwise_lora.cpp`), PlatformIO project (`pio run -e station` / `-e receiver`), RAK board files in `lora/rakwireless/`, bench replay script; its own README. Remote-command key in gitignored `lora/rainwise_lora/local_config.h`. Receiver "rain fix" setting (flash, per board) keeps the Oracle's rain counter continuous across station restarts |
+| `lora/` | RAK4631 RadioLib firmware (`rainwise_lora/rainwise_lora.cpp`), PlatformIO project (`pio run -e station` / `-e receiver`), RAK board files in `lora/rakwireless/`, bench replay script; its own README. Remote-command key in gitignored `lora/rainwise_lora/local_config.h`. Every radio message starts with a 2-byte station ID (`STATION_ID` in local_config.h, like the XBee PAN ID); receiver USB output is tagged `RWP`+ID+packet, read into `station_id` by the logger and NAS service. Receiver settings in flash, per board: "rain fix" (`F`, keeps the Oracle's rain counter continuous across station restarts) and "listen to all stations" (`A`, for the NAS logger) |
 
 Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sample decode).
 
