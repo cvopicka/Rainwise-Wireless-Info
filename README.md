@@ -108,16 +108,17 @@ python rainwise_logger.py --port COM5 --elevation-ft <feet> --baro-offset <inHg>
 
 Runs on the TrueNAS NAS as a custom Docker app ([TrueNAS – installing custom apps][truenas-apps]) and stores everything in SQLite (`rainwise.db`):
 
-- `packets`: raw hex of every valid packet plus decoded fields, so history can be re-decoded later
+- `packets`: raw hex of every valid packet plus decoded fields, so history can be re-decoded later; `station_id` and `source` (which receiver) for LoRa packets
+- `station_status`: metadata about the data. Each LoRa station's once-a-minute status message (uptime, so restarts show; handshake lines; packet, error and channel-busy counts) with the RSSI and SNR it arrived at. Kept forever unless `STATUS_KEEP_DAYS` is set; weather data is never deleted
 - `ip100_xml`: IP-100 readings once a minute, plus the full XML
 
-Inputs: XBee on USB serial, UDP port 5005 (for the future LoRa receiver, one 32-byte packet per datagram), and the IP-100 XML. Each can be turned off in the compose file.
+Inputs: one or more receivers on USB serial (LoRa receiver or XBee breakout; comma-separated `SERIAL_PORT`, e.g. one LoRa receiver per frequency), UDP port 5005 (one 32-byte packet per datagram), and the IP-100 XML. Each can be turned off in the compose file. Every 10 minutes the log shows counts per input (`serial`, `status`, `xml`, ...); weather arriving while `status` stops counting points at a problem.
 
 Only one program can open the serial port at a time. While testing on the PC, run the container with `SERIAL_PORT: ""` so it still logs the XML.
 
 ### `lora/` (RAK4631 firmware)
 
-RadioLib sketch for the XBee replacement, with a station role (UART in, LoRa out) and a receiver role (LoRa in, raw 32-byte packets out on USB and UART1). A PlatformIO project (`lora/platformio.ini`) with `station` and `receiver` environments, built and flashed from VS Code. Radio settings, pins, setup and the bench test are in [lora/README.md](lora/README.md).
+RadioLib sketch for the XBee replacement, with a station role (UART in, LoRa out) and a receiver role (LoRa in; plain 32-byte packets out on UART1, packets tagged with the station ID plus station status frames on USB). A PlatformIO project (`lora/platformio.ini`) with `station` and `receiver` environments, built and flashed from VS Code. Radio settings, pins, setup and the bench test are in [lora/README.md](lora/README.md).
 
 ## Test plan
 

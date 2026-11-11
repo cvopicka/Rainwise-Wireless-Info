@@ -27,6 +27,7 @@ services:
       XML_URL: http://192.168.1.1/status.xml   # your IP-100's address; "" to disable
       XML_INTERVAL: "60"
       DB_PATH: /data/rainwise.db
+      STATUS_KEEP_DAYS: "0"                # station status (metadata) kept this many days; 0 = forever
       ELEVATION_FT: "0"                    # barometer height above sea level, in feet; 0 = no correction
       BARO_OFFSET: "0"                     # inHg, fine-tune against a nearby airport
     volumes:

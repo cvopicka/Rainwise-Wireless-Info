@@ -876,6 +876,18 @@ void writeUsbPacket(uint16_t id, const uint8_t *p) {
   Serial.write(p, PACKET_LEN);
 }
 
+// Station status on USB in raw mode, for the NAS service to store as metadata:
+// "RWT", the station ID (big-endian), RSSI (dBm, signed byte), SNR (dB x 4,
+// signed byte), then the 35-byte status message with its own CRC. 42 bytes.
+void writeUsbStatus(uint16_t id, const uint8_t *s) {
+  long rssi = constrain(lroundf(radio.getRSSI()), -128L, 127L);
+  long snr4 = constrain(lroundf(radio.getSNR() * 4), -128L, 127L);
+  uint8_t tag[7] = {'R', 'W', 'T', (uint8_t)(id >> 8), (uint8_t)(id & 0xFF),
+                    (uint8_t)(int8_t)rssi, (uint8_t)(int8_t)snr4};
+  Serial.write(tag, sizeof(tag));
+  Serial.write(s, STATUS_LEN);
+}
+
 // Keys that change something important must be pressed twice within 5 s.
 char armedKey = 0;
 uint32_t armedMs = 0;
@@ -998,9 +1010,11 @@ void loop() {
       otherGood++;
       if (!debugText) writeUsbPacket(id, p);  // USB only; never to the display
     }
+    if (status && listenAll && !debugText) writeUsbStatus(id, p);
   } else {
     lastHeardMs = millis();
     if (ok) good++;
+    if (status && !debugText) writeUsbStatus(id, p);  // metadata for the logger
     if (otherCmd) handleRainCommand(p);
     if (ok) {
       if (!debugText) writeUsbPacket(id, p);  // USB: the station's bytes, tagged

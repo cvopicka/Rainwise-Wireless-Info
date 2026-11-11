@@ -14,6 +14,11 @@ Storage: SQLite at DB_PATH. Every packet keeps its raw hex, so history can be
 re-decoded later once the unknown bytes are figured out. Packets from a LoRa
 receiver carry the station ID they came from (station_id column); with the
 receiver set to listen to all stations, one database can log several.
+
+Station status (metadata): a LoRa receiver also passes on each station's
+once-a-minute status message (uptime, handshake lines, packet and error counts,
+channel busy, RSSI/SNR); these go to the station_status table. Kept forever
+unless STATUS_KEEP_DAYS is set; weather data is never deleted.
 """
 
 import os
@@ -34,6 +39,9 @@ XML_URL = os.environ.get("XML_URL", "").strip()
 XML_INTERVAL = float(os.environ.get("XML_INTERVAL", "60"))
 DB_PATH = os.environ.get("DB_PATH", "/data/rainwise.db")
 STATS_EVERY = float(os.environ.get("STATS_EVERY", "600"))
+STATUS_KEEP_DAYS = float(
+    os.environ.get("STATUS_KEEP_DAYS", "0") or 0
+)  # delete station_status rows older than this; 0 = keep forever
 ELEVATION_FT = float(
     os.environ.get("ELEVATION_FT", "0") or 0
 )  # 0 = no sea-level correction
@@ -43,6 +51,14 @@ BARO_OFFSET = float(
 
 HEADER = bytes([0x33, 0x80, 0x00])
 PACKET_LEN = 32
+
+# Station status frame from a LoRa receiver's USB port (lora/README.md):
+# "RWT", station ID (2, big-endian), RSSI (dBm, signed), SNR (dB x 4, signed),
+# then the 35-byte status message: "RWS", version 2, ... CRC-16/XMODEM.
+STATUS_TAG = b"RWT"
+STATUS_MSG_LEN = 35
+STATUS_FRAME_LEN = 7 + STATUS_MSG_LEN
+HANDSHAKE_MODES = {0: "mirror", 1: "cts-low", 2: "released"}
 
 
 def log(msg):
@@ -116,14 +132,66 @@ def decode(p: bytes) -> dict:
 DECODED_COLS = list(decode(bytes([0x33, 0x80, 0x00] + [0] * 29)).keys())
 
 
+def s8(b):
+    return b - 256 if b > 127 else b
+
+
+def le(p, i, n):
+    return int.from_bytes(p[i : i + n], "little")
+
+
+def parse_status_frame(f: bytes):
+    """Status frame -> dict of station_status columns, or None if it doesn't check out.
+    Field layout: the "Status" comment in lora/rainwise_lora/rainwise_lora.cpp."""
+    if len(f) != STATUS_FRAME_LEN or f[:3] != STATUS_TAG:
+        return None
+    m = f[7:]
+    if m[:3] != b"RWS" or m[3] != 2:
+        return None
+    if crc16_xmodem(m[:-2]) != int.from_bytes(m[-2:], "big"):
+        return None
+    flags = m[5]
+    return {
+        "station_id": f[3:5].hex().upper(),
+        "rssi_dbm": s8(f[5]),
+        "snr_db": s8(f[6]) / 4,
+        "uptime_s": le(m, 7, 4),
+        "handshake": HANDSHAKE_MODES.get(m[4], str(m[4])),
+        "sleep_rq_high": flags & 1,
+        "cts_high": (flags >> 1) & 1,
+        "sleep_rq_wired": (flags >> 2) & 1,
+        "commands_on": (flags >> 3) & 1,
+        "last_command": m[6],
+        "wakes": le(m, 11, 2),  # since the previous status message
+        "avg_awake_ms": le(m, 13, 2),
+        "max_awake_ms": le(m, 15, 2),
+        "weather_packets": le(m, 17, 4),  # totals since the station started
+        "uart_bytes": le(m, 21, 4),
+        "tx_errors": le(m, 25, 2),
+        "dropped": le(m, 27, 2),
+        "channel_busy": le(m, 29, 2),
+        "sent_anyway": le(m, 31, 2),
+        "raw_hex": m.hex(" ").upper(),
+    }
+
+
+def _blank_status_frame():
+    m = b"RWS\x02" + bytes(29)
+    return STATUS_TAG + bytes(4) + m + crc16_xmodem(m).to_bytes(2, "big")
+
+
+STATUS_COLS = list(parse_status_frame(_blank_status_frame()).keys())
+
+
 class Framer:
-    """Finds 32-byte packets that start with the header and pass the CRC.
-    Re-syncs one byte at a time if a header match turns out to be bogus.
+    """Pulls CRC-valid 32-byte packets out of a byte stream, re-syncing as needed.
 
     A LoRa receiver puts a 5-byte tag in front of each packet on USB: "RWP"
-    and the 2-byte station ID (big-endian). feed() yields (packet, station_id),
-    with station_id as 4 hex digits, or None for an untagged source such as
-    an XBee breakout. See lora/README.md, "Station ID"."""
+    and the 2-byte station ID (big-endian), and also sends station status
+    frames ("RWT", see STATUS_TAG). feed() yields ("packet", packet,
+    station_id) with station_id as 4 hex digits, or None for an untagged
+    source such as an XBee breakout, and ("status", row) for status frames.
+    See lora/README.md, "Station ID"."""
 
     TAG = b"RWP"
     KEEP = 7  # a possible tag + partial header, kept while waiting for more bytes
@@ -136,6 +204,21 @@ class Framer:
         self.buf.extend(data)
         while True:
             i = self.buf.find(HEADER)
+            j = self.buf.find(STATUS_TAG)
+            # A status frame comes first if it starts before the weather tag
+            # that sits 5 bytes in front of the next header.
+            if j >= 0 and (i < 0 or j < i - 5):
+                del self.buf[:j]
+                if len(self.buf) < STATUS_FRAME_LEN:
+                    return
+                row = parse_status_frame(bytes(self.buf[:STATUS_FRAME_LEN]))
+                if row:
+                    del self.buf[:STATUS_FRAME_LEN]
+                    yield "status", row
+                else:
+                    self.bad += 1
+                    del self.buf[:1]
+                continue
             if i < 0:
                 del self.buf[: -self.KEEP]
                 return
@@ -150,7 +233,7 @@ class Framer:
             pkt = bytes(self.buf[i : i + PACKET_LEN])
             if crc_ok(pkt):
                 del self.buf[: i + PACKET_LEN]
-                yield pkt, sid
+                yield "packet", pkt, sid
             else:
                 self.bad += 1
                 del self.buf[: i + 1]
@@ -176,6 +259,14 @@ CREATE TABLE IF NOT EXISTS ip100_xml (
     temp_in REAL, raw_xml TEXT
 );
 CREATE INDEX IF NOT EXISTS ip100_ts ON ip100_xml(ts_utc);
+
+CREATE TABLE IF NOT EXISTS station_status (
+    id INTEGER PRIMARY KEY,
+    ts_utc TEXT NOT NULL,
+    source TEXT NOT NULL,
+    {", ".join(c + (" TEXT" if c in ("station_id", "handshake", "raw_hex") else " REAL") for c in STATUS_COLS)}
+);
+CREATE INDEX IF NOT EXISTS station_status_ts ON station_status(ts_utc);
 """
 
 XML_PATHS = {
@@ -204,8 +295,21 @@ def db_writer(q: queue.Queue):
         con.execute("ALTER TABLE packets ADD COLUMN station_id TEXT")
     con.commit()
     log(f"database ready at {DB_PATH}")
+    last_cleanup = 0.0
     while True:
-        table, row = q.get()
+        if STATUS_KEEP_DAYS and time.time() - last_cleanup > 86400:
+            last_cleanup = time.time()
+            cutoff = datetime.fromtimestamp(
+                time.time() - STATUS_KEEP_DAYS * 86400, timezone.utc
+            ).isoformat(timespec="seconds")
+            n = con.execute("DELETE FROM station_status WHERE ts_utc < ?", (cutoff,)).rowcount
+            con.commit()
+            if n:
+                log(f"removed {n} station status rows older than {STATUS_KEEP_DAYS:g} days")
+        try:
+            table, row = q.get(timeout=3600)
+        except queue.Empty:
+            continue
         cols = ", ".join(row)
         marks = ", ".join("?" for _ in row)
         try:
@@ -218,7 +322,7 @@ def db_writer(q: queue.Queue):
 
 
 # ------------------------------------------------------------------ inputs
-stats = {"serial": 0, "udp": 0, "udp_bad": 0, "xml": 0, "xml_err": 0}
+stats = {"serial": 0, "status": 0, "udp": 0, "udp_bad": 0, "xml": 0, "xml_err": 0}
 
 
 def store_packet(q, pkt, source, station_id=None):
@@ -248,9 +352,18 @@ def serial_reader(q, port):
             ) as ser:
                 log(f"serial open: {port} @ {BAUD}")
                 while True:
-                    for pkt, sid in framer.feed(ser.read(64)):
-                        stats["serial"] += 1
-                        store_packet(q, pkt, f"serial:{port}", sid)
+                    for item in framer.feed(ser.read(64)):
+                        if item[0] == "packet":
+                            stats["serial"] += 1
+                            store_packet(q, item[1], f"serial:{port}", item[2])
+                        else:
+                            stats["status"] += 1
+                            q.put(
+                                (
+                                    "station_status",
+                                    {"ts_utc": utc_now(), "source": f"serial:{port}", **item[1]},
+                                )
+                            )
         except Exception as e:
             log(f"serial error on {port} ({e}); retrying in 10 s")
             time.sleep(10)

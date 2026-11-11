@@ -19,7 +19,7 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 | `docs/protocol.md` | Field notes / evidence per byte, raw samples, XML snapshot, sea-level pressure |
 | `docs/hardware.md` | XBee config, RJ11 display link, LoRa plan and options, wiring diagrams, FCC notes |
 | `rainwise_logger.py` | PC test logger: XBee serial -> CSV, CRC check, decode, polls IP-100 XML. `--test` runs a self-test |
-| `rainwise/rainwise_service.py` | Long-term logger for TrueNAS (Docker): serial + UDP 5005 + IP-100 XML -> SQLite, stores raw hex |
+| `rainwise/rainwise_service.py` | Long-term logger for TrueNAS (Docker): serial (one or more receivers) + UDP 5005 + IP-100 XML -> SQLite, stores raw hex and station_id; `station_status` table keeps LoRa station status (with RSSI/SNR) as metadata, `STATUS_KEEP_DAYS` (0 = forever) |
 | `rainwise/docker-compose.yml` | TrueNAS custom app (public copy uses placeholders) |
 | `solar/solar_model.py` | Clear-sky sun model (NOAA + PVEducation formulas); location via SOLAR_LAT/LON/TZ env vars |
 | `diagrams/*.mmd`, `*.png` | Mermaid source + rendered wiring diagrams (also embedded in docs/hardware.md) |
