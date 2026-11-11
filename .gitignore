@@ -32,3 +32,6 @@ lora/rainwise_lora/local_config.h
 # Station photos (backgrounds show the property)
 /photos/
 .vscode/
+
+# Private NAS compose (real IP-100 address, elevation, time zone)
+rainwise/docker-compose.local.yml

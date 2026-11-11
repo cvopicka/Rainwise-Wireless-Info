@@ -3,7 +3,8 @@
 Rainwise MK3-LR logging service.
 
 Inputs (each optional, enable via environment variables):
-  SERIAL_PORT   XBee breakout on USB, e.g. /dev/ttyUSB0   (empty = off)
+  SERIAL_PORT   receiver on USB: XBee breakout (/dev/ttyUSB0) or LoRa
+                receiver in raw mode (/dev/ttyACM0)   (empty = off)
   UDP_PORT      packets forwarded by a future ESP32/LoRa receiver,
                 one 32-byte packet per datagram (raw bytes or hex text)  (0 = off)
   XML_URL       IP-100 status XML, polled every XML_INTERVAL seconds  (empty = off)

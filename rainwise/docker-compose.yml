@@ -5,19 +5,23 @@
 #   1. Create a dataset, e.g. /mnt/tank/apps/rainwise
 #   2. Copy rainwise_service.py into it
 #   3. Change the two host paths below if your pool/dataset differ
-#   4. Plug in the XBee breakout and check its name: ls /dev/serial/by-id/
+#   4. Plug in the receiver and check its name: ls /dev/serial/by-id/
+#        XBee USB breakout (CP2102 chip): usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_...-port0
+#        LoRa receiver (RAK4631, raw mode):  usb-RAKwireless_WisCore_RAK4631_Board_<serial>-if00
+#      Both send the same 32-byte packets, so switching later only changes the
+#      left side of the devices: line; the database carries on.
 services:
   rainwise:
     image: python:3.12-slim
     container_name: rainwise
     restart: unless-stopped
     command: >
-      sh -c "pip install --quiet --no-cache-dir pyserial &&
+      sh -c "pip install --quiet --no-cache-dir pyserial==3.5 &&
              python -u /app/rainwise_service.py"
     environment:
       TZ: UTC                              # set to your time zone, e.g. America/Chicago
-      SERIAL_PORT: /dev/ttyUSB0            # set to "" to disable
-      BAUD: "9600"
+      SERIAL_PORT: /dev/rainwise           # name inside the container (devices: below); "" to disable
+      BAUD: "9600"                         # XBee breakout; ignored by the RAK's USB port
       UDP_PORT: "5005"                     # future ESP32/LoRa receiver; "0" to disable
       XML_URL: http://192.168.1.1/status.xml   # your IP-100's address; "" to disable
       XML_INTERVAL: "60"
@@ -30,6 +34,8 @@ services:
     devices:
       # Left side: the host's device (a /dev/serial/by-id/... path stays
       # stable across reboots). Right side: the name the script uses.
-      - /dev/ttyUSB0:/dev/ttyUSB0
+      - /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0:/dev/rainwise
+      # LoRa receiver instead:
+      # - /dev/serial/by-id/usb-RAKwireless_WisCore_RAK4631_Board_<serial>-if00:/dev/rainwise
     ports:
       - "5005:5005/udp"
