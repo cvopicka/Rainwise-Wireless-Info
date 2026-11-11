@@ -3,8 +3,9 @@
 Rainwise MK3-LR logging service.
 
 Inputs (each optional, enable via environment variables):
-  SERIAL_PORT   receiver on USB: XBee breakout (/dev/ttyUSB0) or LoRa
-                receiver in raw mode (/dev/ttyACM0)   (empty = off)
+  SERIAL_PORT   receiver(s) on USB: XBee breakout (/dev/ttyUSB0) or LoRa
+                receiver in raw mode (/dev/ttyACM0); several separated by
+                commas, e.g. one LoRa receiver per frequency   (empty = off)
   UDP_PORT      packets forwarded by a future ESP32/LoRa receiver,
                 one 32-byte packet per datagram (raw bytes or hex text)  (0 = off)
   XML_URL       IP-100 status XML, polled every XML_INTERVAL seconds  (empty = off)
@@ -26,7 +27,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
 # ------------------------------------------------------------------ config
-SERIAL_PORT = os.environ.get("SERIAL_PORT", "").strip()
+SERIAL_PORTS = [p.strip() for p in os.environ.get("SERIAL_PORT", "").split(",") if p.strip()]
 BAUD = int(os.environ.get("BAUD", "9600"))
 UDP_PORT = int(os.environ.get("UDP_PORT", "5005"))
 XML_URL = os.environ.get("XML_URL", "").strip()
@@ -235,22 +236,23 @@ def store_packet(q, pkt, source, station_id=None):
     )
 
 
-def serial_reader(q):
+def serial_reader(q, port):
+    """One thread per receiver; source is "serial:<port>"."""
     import serial  # pyserial
 
     framer = Framer()
     while True:
         try:
             with serial.Serial(
-                SERIAL_PORT, BAUD, bytesize=8, parity="N", stopbits=1, timeout=1
+                port, BAUD, bytesize=8, parity="N", stopbits=1, timeout=1
             ) as ser:
-                log(f"serial open: {SERIAL_PORT} @ {BAUD}")
+                log(f"serial open: {port} @ {BAUD}")
                 while True:
                     for pkt, sid in framer.feed(ser.read(64)):
                         stats["serial"] += 1
-                        store_packet(q, pkt, "serial", sid)
+                        store_packet(q, pkt, f"serial:{port}", sid)
         except Exception as e:
-            log(f"serial error ({e}); retrying in 10 s")
+            log(f"serial error on {port} ({e}); retrying in 10 s")
             time.sleep(10)
 
 
@@ -308,13 +310,13 @@ def main():
     threading.Thread(target=db_writer, args=(q,), daemon=True).start()
     time.sleep(0.5)
 
-    if SERIAL_PORT:
-        threading.Thread(target=serial_reader, args=(q,), daemon=True).start()
+    for port in SERIAL_PORTS:
+        threading.Thread(target=serial_reader, args=(q, port), daemon=True).start()
     if UDP_PORT:
         threading.Thread(target=udp_listener, args=(q,), daemon=True).start()
     if XML_URL:
         threading.Thread(target=xml_poller, args=(q,), daemon=True).start()
-    if not (SERIAL_PORT or UDP_PORT or XML_URL):
+    if not (SERIAL_PORTS or UDP_PORT or XML_URL):
         log("no inputs enabled; set SERIAL_PORT, UDP_PORT or XML_URL")
 
     while True:

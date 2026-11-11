@@ -74,8 +74,12 @@ Which lines the controller really uses is unconfirmed (**verify**); the status m
 Every message on the air starts with a 2-byte **station ID**, like the XBee's PAN ID. All boards of one station (the station and its receivers) are built with the same ID in `rainwise_lora/local_config.h`; a receiver accepts only its own station's ID, so it always knows which station a packet came from. Messages from other IDs are counted and dropped (a text-mode note shows the first one; `i` shows the count). Commands carry the ID of the station they are for, and the station ignores any other. The ID identifies, it doesn't authenticate: the data is not encrypted and anyone could copy an ID (commands are still protected by the command key).
 
 - **Pick an ID** per station: `python3 -c "import secrets; print(hex(secrets.randbelow(0xFFFE) + 1))"`, then set `STATION_ID` in `local_config.h` (see `local_config.h.example`). Without it the ID is `0000`, the same as anyone else who builds this firmware unchanged.
-- **Frequency:** `LORA_FREQ_MHZ` in `local_config.h` can move a station's network to another channel (915.5-922.5 MHz keeps the 500 kHz channel inside the gap between LoRaWAN uplink and downlink). Stations on different frequencies never collide. Two unsynchronised stations on one frequency lose roughly 1 packet in 9 to collisions (each is on the air about 6 % of the time), but a single receiver can only listen to one frequency.
+- **Frequency:** `LORA_FREQ_MHZ` in `local_config.h` can move a station's network to another channel (915.5-922.5 MHz keeps the 500 kHz channel inside the gap between LoRaWAN uplink and downlink, room for about 14 channels). Stations on different frequencies never collide, but a receiver listens to one frequency only, so a logger needs one receiver per frequency (the NAS service takes several, see below).
+- **Sharing a frequency:** each station is on the air about 6 % of the time (113 ms every 2 s). Without precautions, with N stations about 0.887^(N−1) of the packets get through (pure ALOHA, [Abramson 1970][aloha]): 89 % with 2 stations, 62 % with 5, 34 % with 10, and the channel is full at about 17. Each packet carries every reading, so temperature, humidity and pressure (30 packets a minute) and rain (a running counter) survive heavy losses; wind suffers first. A stronger station usually still gets through a collision (capture effect, [Bor et al. 2016][bor2016]; margin for the SX1262 **verify**).
+- **Listen before talk (station):** to keep collisions down, the station waits a random 0-40 ms before every transmission, so two stations sending every 2 s don't stay locked in step, then checks the channel with the SX1262's channel activity detection (CAD), which on the SX126x detects a transmission anywhere in the packet, not only its preamble ([Semtech AN1200.85][an1200-85], whose example uses the RAK4631). If it hears another LoRa transmission it backs off a random 30-150 ms and checks again; after 5 tries it sends anyway, so no packet waits long enough to be replaced by the next one (worst case about 0.7 s). Stations too far apart to hear each other but both in range of one receiver can still collide (the "hidden node" case). `#define LBT_ENABLED 0` in `local_config.h` turns the channel check off; the random delay stays. The status message counts how often the channel was busy and how often a packet went out anyway.
 - **USB output is tagged:** in raw mode a receiver writes `RWP`, the station ID (2 bytes, big-endian), then the 32-byte packet. `rainwise_logger.py` and the NAS service read the tag into a `station_id` column; anything that only looks for `33 80 00` skips it. UART1 (the display and IP-100) gets plain 32-byte packets, as from an XBee.
+
+**Logging several frequencies:** give the NAS service one receiver per frequency: list them comma-separated in `SERIAL_PORT` (e.g. `/dev/rainwise,/dev/rainwise2`) with a `devices:` line for each in `rainwise/docker-compose.yml`. Each row records which receiver (`source`) and which station (`station_id`) it came from.
 
 **Listening to several stations (a logger such as the NAS).** A per-board setting, saved in flash like the rain fix: in text mode press `A` twice. The receiver then also passes other stations' weather packets to USB, each tagged with its own ID, so one NAS database can log several stations (filter on `station_id`). The display output, the rain fix and commands stay with the board's own station. The stations must share the receiver's frequency. Press `A` twice again to go back to its own station only.
 
@@ -95,7 +99,7 @@ The station sends a 31-byte status message (header `RWS`) at startup, every 60 s
 
 ```
 [ABCD] status: up 3600 s, handshake mirror, SLEEP_RQ high (asleep), CTS high, wakes 30 (avg 9 ms, max 12 ms),
-weather packets 1800, UART bytes 57600, TX errors 0, dropped 0, commands on, last command 4 | rssi -71 snr 9.5
+weather packets 1800, UART bytes 57600, TX errors 0, dropped 0, channel busy 0, sent anyway 0, commands on, last command 4 | rssi -71 snr 9.5
 ```
 
 How to read it:
@@ -104,6 +108,7 @@ How to read it:
 - **wakes 0 and SLEEP_RQ high** while **weather packets** stay at 0: the controller isn't waking the radio, or the SLEEP_RQ wire is loose. With CTS held high the controller may be waiting; try `1` (cts-low).
 - **UART bytes rising but weather packets not**: data arrives but doesn't frame, e.g. wrong baud rate.
 - **Weather packets rising**: the link works; the receivers are getting data.
+- **Channel busy rising**: another LoRa device is transmitting on this frequency (another station, or someone else's equipment). A few are harmless; **sent anyway** rising as well means the channel is crowded, and moving to another frequency (`LORA_FREQ_MHZ`) is the fix.
 
 Commands, typed in a receiver's text mode: `0` / `1` / `2` set the handshake mode, `s` asks for status now. The receiver sends the command just after it next hears the station (the station listens between its own transmissions), and the station's reply shows the new mode and the command's sequence number under "last command". If nothing confirms it within a minute, type it again.
 
@@ -167,7 +172,7 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 5. **Live station data (optional).** If you have a 3.3 V XBee breakout whose DOUT pin you can reach, wire XBee DOUT to S's RX1 and connect the grounds. S then relays the live station packets over LoRa. A receiver-configured XBee outputs at **9600**, so build S with `STATION_UART_BAUD` set to 9600 for this test. Check that both sides are 3.3 V logic first (**verify**).
 6. **Status and commands, no station needed.** With S running and R1 in text mode, a status line should appear every minute (`SLEEP_RQ high (asleep)` with nothing connected, because of the pull-up). Briefly connect S's J6 SDA to GND with a jumper: SLEEP_RQ shows `low (awake)`, and removing the jumper counts one wake. Type `1`, `2`, `0` on R1 and check that each reply shows the new mode and command number; measure J6 SCL (CTS) with the VTVM: low in cts-low, floating in released, following SDA in mirror. J7 pin 2 (TX1, ON/SLEEP) is the opposite: about 3.3 V in cts-low, floating in released, and in mirror 0 V with SDA open (asleep) and 3.3 V with SDA jumpered to GND (awake). Power-cycle S and check that the mode was remembered.
 7. **Rain fix.** On the receiver that will feed the Oracle, press `F` twice (rain fix on), then run `python lora/replay_packets.py ports/station rainwise_log.csv --tip-every 3 --restart-after 20`. That adds a fake tip every 3 packets and, after 20 packets, pauses 40 s and starts the counter again at 0. In that receiver's text mode the `rain raw->out` numbers should go up together, then after the pause the raw counter drops to 0 while the out counter carries on without a jump. `r` on another receiver should show `station restarts seen 1`. Then try `R` twice and check that the out counter equals the raw one again. Last, check the UART1 bytes with the 3.3 V USB-serial adapter (step 4): byte 13 is the out counter, and the CRC must be valid.
-8. **Station ID.** Flash one spare board as a second station with another ID (`PLATFORMIO_BUILD_FLAGS="-DSTATION_ID=0x1234"`, see [Station ID](#station-id-and-several-stations)) and replay into both stations. The receivers print only their own station's lines, plus one `note: heard another station, ID 1234`; `i` counts the others. Press `A` twice on one receiver: it now shows both, the other marked `other`. In raw mode, `rainwise_logger.py --no-xml` on that receiver shows each row with its `[ID]`. Re-flash the spare normally afterwards.
+8. **Station ID.** Flash one spare board as a second station with another ID (`PLATFORMIO_BUILD_FLAGS="-DSTATION_ID=0x1234"`, see [Station ID](#station-id-and-several-stations)) and replay into both stations. The receivers print only their own station's lines, plus one `note: heard another station, ID 1234`; `i` counts the others. Press `A` twice on one receiver: it now shows both, the other marked `other`. In raw mode, `rainwise_logger.py --no-xml` on that receiver shows each row with its `[ID]`. With both stations replaying at once, their status lines should show `channel busy` counting up now and then (listen before talk at work) and `sent anyway` staying at or near 0, and the receivers' `bad` count should stay low. Re-flash the spare normally afterwards.
 9. **Range.** Carry a laptop with a receiver in text mode toward and past the station distance. Note RSSI and SNR, then repeat at other SF values (all boards must change together).
 
 ## Station wiring: XBee breakout to RAK19003
@@ -280,6 +285,9 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 - [PlatformIO – platformio.ini][pio-ini]: environments, `boards_dir`, `build_src_filter`, `lib_deps`.
 - [Nordic – nRF52840 Product Specification][nrf52840-ps]: UARTE pin selection (PSEL registers may only be changed while the UARTE is disabled).
 - [Adafruit nRF52 nrfutil][nrfutil]: the upload tool PlatformIO uses for this board.
+- [Semtech – AN1200.85 Introduction to Channel Activity Detection][an1200-85] (PDF): CAD for listen-before-talk; SX126x detects the whole packet, SX127x only the preamble; example on a RAK4631.
+- [Abramson 1970, "The ALOHA System"][aloha]: share of packets lost when unsynchronised transmitters share a channel.
+- [Bor et al. 2016, "Do LoRa Low-Power Wide-Area Networks Scale?"][bor2016]: LoRa collisions and the capture effect.
 - [pyserial][pyserial]
 
 [radiolib-sx1262]: https://jgromes.github.io/RadioLib/class_s_x1262.html
@@ -298,6 +306,9 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 [pyserial]: https://pyserial.readthedocs.io/
 [nrfutil]: https://github.com/adafruit/Adafruit_nRF52_nrfutil
 [nrf52840-ps]: https://docs.nordicsemi.com/bundle/ps_nrf52840/page/uarte.html
+[an1200-85]: https://www.semtech.com/uploads/technology/LoRa/cad-ensuring-lora-packets.pdf
+[aloha]: https://dl.acm.org/doi/10.1145/1478462.1478502
+[bor2016]: https://dl.acm.org/doi/10.1145/2988287.2989163
 [sf-xbee-bob]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
 [sf-2mm-header]: https://sparkfun.com/products/10112
 [xbee-pins-802]: https://docs.digi.com/resources/documentation/digidocs/90001500/reference/r_pinouts_802.htm

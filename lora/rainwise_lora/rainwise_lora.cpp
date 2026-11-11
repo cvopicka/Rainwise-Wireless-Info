@@ -108,7 +108,7 @@ const uint8_t HEADER[3] = {0x33, 0x80, 0x00};
 #endif
 const uint16_t MY_STATION_ID = STATION_ID;
 const uint8_t ID_LEN = 2;
-const uint8_t AIR_MAX = 34;  // ID + 32-byte weather packet, the longest message
+const uint8_t AIR_MAX = 37;  // ID + 35-byte status message, the longest message
 
 void putId(uint8_t *p, uint16_t id) {
   p[0] = id >> 8;
@@ -132,7 +132,8 @@ void printId(uint16_t id) {
 //   6 last command seq  7-10 uptime s  11-12 wakes this interval
 //   13-14 average awake ms  15-16 longest awake ms  17-20 weather packets
 //   received (total)  21-24 UART bytes received (total)  25-26 TX errors
-//   27-28 packets dropped  29-30 CRC
+//   27-28 packets dropped  29-30 channel found busy (total)  31-32 sent
+//   without a clear channel (total)  33-34 CRC
 // Command, receiver -> station (or -> a receiver with the rain fix on):
 //   0-2 "RWC"  3 version  4-7 COMMAND_KEY  8 command  9 argument
 //   10 sequence number  11-12 CRC
@@ -141,8 +142,8 @@ void printId(uint16_t id) {
 //   0-2 "RWR"  3 version  4 flags (bit0 rain fix on, bit1 baseline known)
 //   5 counter sent to the display  6 last station counter  7-8 station
 //   restarts detected since boot  9 last command seq  10-13 uptime s  14-15 CRC
-const uint8_t MSG_VERSION = 1;
-const uint8_t STATUS_LEN = 31;
+const uint8_t MSG_VERSION = 2;
+const uint8_t STATUS_LEN = 35;
 const uint8_t CMD_LEN = 13;
 const uint8_t RAIN_LEN = 16;
 const uint8_t STATUS_MAGIC[3] = {'R', 'W', 'S'};
@@ -316,7 +317,32 @@ uint8_t pending[PACKET_LEN];
 bool havePending = false;
 uint32_t sent = 0, dropped = 0, txErrors = 0, packetsIn = 0, uartBytes = 0;
 
-enum RadioState { RS_IDLE, RS_RX, RS_TX_WEATHER, RS_TX_STATUS };
+enum RadioState { RS_IDLE, RS_RX, RS_CAD, RS_TX_WEATHER, RS_TX_STATUS };
+
+// ---- Listen before talk (for several stations on one frequency) ----
+// Before each transmission the station waits a random 0-JITTER_MAX_MS (so two
+// stations sending every 2 s don't stay locked in step), then runs the
+// SX1262's channel activity detection (CAD, Semtech AN1200.85; on SX126x it
+// detects a transmission anywhere in the packet, not only the preamble). If another
+// LoRa transmission is detected it backs off a random BACKOFF_MIN_MS to
+// BACKOFF_MAX_MS and tries again; after LBT_MAX_TRIES it sends anyway, so a
+// packet is never held long enough to be replaced by the next one (2 s).
+// Worst case about 0.7 s of delay. LBT_ENABLED 0 in local_config.h turns
+// the channel check off (the random delay stays).
+#ifndef LBT_ENABLED
+#define LBT_ENABLED 1
+#endif
+const uint16_t JITTER_MAX_MS = 40;
+const uint16_t BACKOFF_MIN_MS = 30, BACKOFF_MAX_MS = 150;
+const uint8_t LBT_MAX_TRIES = 5;
+bool txWaiting = false;  // a send is scheduled for nextTryMs
+uint32_t nextTryMs = 0;
+uint8_t txTries = 0;
+uint32_t channelBusy = 0, sentAnyway = 0;
+uint32_t cadStartMs = 0;
+const uint32_t CAD_TIMEOUT_MS = 100;  // a CAD takes a few symbols (~2 ms each at SF10/500 kHz)
+
+void sendNext();
 RadioState radioState = RS_IDLE;
 
 uint8_t mode = HS_MIRROR;
@@ -422,6 +448,8 @@ void buildStatus(uint8_t *s) {
   put32(s + 21, uartBytes);
   put16(s + 25, min(txErrors, (uint32_t)0xFFFF));
   put16(s + 27, min(dropped, (uint32_t)0xFFFF));
+  put16(s + 29, min(channelBusy, (uint32_t)0xFFFF));
+  put16(s + 31, min(sentAnyway, (uint32_t)0xFFFF));
   sealMessage(s, STATUS_LEN);
   wakes = 0;
   awakeTotalMs = 0;
@@ -479,8 +507,24 @@ bool startTx(const uint8_t *p, size_t len, RadioState next) {
   return true;
 }
 
+// Weather first, then status. Called when the channel is clear (or LBT gave up).
+void sendNext() {
+  txWaiting = false;
+  if (havePending) {
+    havePending = false;
+    if (startTx(pending, PACKET_LEN, RS_TX_WEATHER)) blink();
+  } else if (statusDue) {
+    uint8_t s[STATUS_LEN];
+    buildStatus(s);
+    statusDue = false;
+    lastStatusMs = millis();
+    startTx(s, STATUS_LEN, RS_TX_STATUS);
+  }
+}
+
 void setup() {
   pinMode(LED_PIN, OUTPUT);
+  randomSeed(NRF_FICR->DEVICEID[0] ^ NRF_FICR->DEVICEID[1]);  // differs per board
   // XBee inputs have pull-ups by default (PR command); match that on SLEEP_RQ.
   if (SLEEP_RQ_PIN >= 0) pinMode(SLEEP_RQ_PIN, INPUT_PULLUP);
   if (ON_SLEEP_PIN >= 0) pinMode(ON_SLEEP_PIN, OUTPUT);
@@ -519,7 +563,9 @@ void loop() {
     radioIrq = false;
     if (radioState == RS_TX_WEATHER || radioState == RS_TX_STATUS) {
       radio.finishTransmit();
-      if (radioState == RS_TX_WEATHER) {
+      bool wasWeather = radioState == RS_TX_WEATHER;
+      radioState = RS_IDLE;
+      if (wasWeather) {
         sent++;
         if (debugText) {
           Serial.print("sent ");
@@ -529,22 +575,44 @@ void loop() {
         }
       }
     } else if (radioState == RS_RX) {
+      radioState = RS_IDLE;
       handleReceived();
+    } else if (radioState == RS_CAD) {
+      radioState = RS_IDLE;
+      if (radio.getChannelScanResult() == RADIOLIB_LORA_DETECTED) {
+        channelBusy++;
+        if (++txTries < LBT_MAX_TRIES) {
+          nextTryMs = millis() + random(BACKOFF_MIN_MS, BACKOFF_MAX_MS + 1);
+          if (debugText) Serial.println("channel busy, backing off");
+        } else {
+          sentAnyway++;
+          sendNext();
+        }
+      } else {
+        sendNext();
+      }
     }
-    radioState = RS_IDLE;
+  } else if (radioState == RS_CAD && millis() - cadStartMs > CAD_TIMEOUT_MS) {
+    radioState = RS_IDLE;  // CAD never reported back: don't hold the packet
+    sendNext();
   }
 
-  // Weather first, then status; otherwise listen for commands.
+  // Something to send: schedule it after a random delay, then check the
+  // channel (or just send, with LBT off). Otherwise listen for commands.
   if (radioState == RS_IDLE || radioState == RS_RX) {
-    if (havePending) {
-      havePending = false;
-      if (startTx(pending, PACKET_LEN, RS_TX_WEATHER)) blink();
-    } else if (statusDue) {
-      uint8_t s[STATUS_LEN];
-      buildStatus(s);
-      statusDue = false;
-      lastStatusMs = millis();
-      startTx(s, STATUS_LEN, RS_TX_STATUS);
+    if ((havePending || statusDue) && !txWaiting) {
+      txWaiting = true;
+      txTries = 0;
+      nextTryMs = millis() + random(0, JITTER_MAX_MS + 1);
+    }
+    if (txWaiting && (int32_t)(millis() - nextTryMs) >= 0) {
+      radioIrq = false;
+      if (LBT_ENABLED && radio.startChannelScan() == RADIOLIB_ERR_NONE) {
+        radioState = RS_CAD;
+        cadStartMs = millis();
+      } else {
+        sendNext();
+      }
     } else if (radioState == RS_IDLE) {
       radioIrq = false;
       if (radio.startReceive() == RADIOLIB_ERR_NONE) radioState = RS_RX;
@@ -716,6 +784,10 @@ void printStatus(const uint8_t *s) {
   Serial.print(get16(s + 25));
   Serial.print(", dropped ");
   Serial.print(get16(s + 27));
+  Serial.print(", channel busy ");
+  Serial.print(get16(s + 29));
+  Serial.print(", sent anyway ");
+  Serial.print(get16(s + 31));
   Serial.print(", commands ");
   Serial.print(s[5] & 8 ? "on" : "OFF");
   Serial.print(", last command ");

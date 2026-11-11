@@ -21,6 +21,7 @@ services:
     environment:
       TZ: UTC                              # set to your time zone, e.g. America/Chicago
       SERIAL_PORT: /dev/rainwise           # name inside the container (devices: below); "" to disable
+                                           # several receivers (one per frequency): /dev/rainwise,/dev/rainwise2
       BAUD: "9600"                         # ignored by the RAK's USB port; used by an XBee breakout
       UDP_PORT: "5005"                     # network receiver (packets over UDP); "0" to disable
       XML_URL: http://192.168.1.1/status.xml   # your IP-100's address; "" to disable
@@ -35,6 +36,8 @@ services:
       # Left side: the host's device (a /dev/serial/by-id/... path stays
       # stable across reboots). Right side: the name the script uses.
       - /dev/serial/by-id/usb-RAKwireless_WisCore_RAK4631_Board_<serial>-if00:/dev/rainwise
+      # A second LoRa receiver (another frequency), with SERIAL_PORT listing both:
+      # - /dev/serial/by-id/usb-RAKwireless_WisCore_RAK4631_Board_<serial2>-if00:/dev/rainwise2
       # XBee USB breakout instead:
       # - /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0:/dev/rainwise
     ports:
