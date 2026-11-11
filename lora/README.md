@@ -235,6 +235,8 @@ Everything fiddly happens indoors; the ladder part is a swap and a plug.
 3. Connect the buck converter to the battery. Station power on.
 4. Watch the RAK's green LED: one short blink every 2 s means packets are flowing. No blinks: go back indoors and check the status messages on a receiver; change the handshake mode from there if needed. Fast continuous blinking means the radio failed to start.
 
+5. Back indoors: stop the NAS logger app, delete its database file (everything in it so far is bench-replay data with current timestamps), and start it again, so the real history starts clean.
+
 If anything is wrong and can't be fixed from indoors, the fallback is to put the original XBee back.
 
 ## References
