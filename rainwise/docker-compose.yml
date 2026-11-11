@@ -16,7 +16,7 @@ services:
     container_name: rainwise
     restart: unless-stopped
     command: >
-      sh -c "pip install --quiet --no-cache-dir pyserial==3.5 &&
+      sh -c "pip install --quiet --no-cache-dir --root-user-action=ignore --disable-pip-version-check pyserial==3.5 &&
              python -u /app/rainwise_service.py"
     environment:
       TZ: UTC                              # set to your time zone, e.g. America/Chicago
