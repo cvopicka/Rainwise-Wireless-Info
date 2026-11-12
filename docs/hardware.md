@@ -71,15 +71,17 @@ Owner's photo of the failed receiver box's board with the XBee removed (photo ke
 | --- | --- | --- |
 | U1 | XBee socket (two 10-pin 2 mm rows) | Takes the receiver XBee |
 | U3 | **LP38691DT-3.3** (National/TI marking), 3.3 V low-dropout regulator, TO-252 | Powers the XBee from the 9 V input. Rated **2.7 to 10 V input**, 500 mA ([TI LP38691][lp38691]) |
-| U4 | Tiny 5- or 6-lead chip (SOT-23 size), marking not readable in the photo | The only logic chip on the board. With R1 (marked 103 = 10 kΩ) next to it and traces running toward the XBee socket and toward J2, it is most likely a single-gate buffer or level shifter between the XBee's data out and the RJ11 (**verify**: read the marking, trace the pins) |
-| D2, R2 | Small diode-shaped part with a resistor in series | Probably an indicator LED (**verify**) |
-| D1, R3, C1, C3 | 3-lead SOT-23 part plus a resistor and two capacitors, between the regulator and J2 | Function unknown (protection or filtering, **verify**) |
+| U4 | Tiny **6-lead** chip (SOT-23-6 size), marking not readable even in the full-resolution photo | The only logic chip on the board. With R1 (marked 103 = 10 kΩ) next to it and traces running toward the XBee socket and toward J2, it is most likely a single-gate buffer or level shifter between the XBee's data out and the RJ11 (**verify**: read the marking, trace the pins) |
+| D2, R2 | Part with a clear body and a resistor in series | Probably an indicator LED (**verify**) |
+| D1 | SOT-23 marked **KG5** = **MMBZ5230B, 4.7 V Zener diode** ([Diodes Inc. MMBZ52xxB datasheet][mmbz5230b], [SMD code database][smd-kg5]) | With R3 (marking not readable) and C1/C3 next to it, most likely a resistor-plus-Zener supply of about 4.7 V taken from the 9 V input (**verify**, see below) |
+| R3, C1, C3 | Resistor and two capacitors around D1 | |
 | C2 | Capacitor at the regulator | |
 | J1 | DC barrel jack (9 V in) | Its center-pin trace runs **straight to J2**: the unregulated 9 V goes down the telephone cable to power the Oracle, confirming the owner's observation |
 | J2 | Modular (RJ11-type) jack | To the Oracle |
 
 What this means:
 
+- **The data probably leaves the board at about 5 V logic (a hypothesis, verify).** The 4.7 V Zener suggests a second, roughly 5 V supply made from the 9 V, and the obvious user of it is U4. A 6-lead chip running from 3.3 V on one side and about 5 V on the other is how a single-bit level translator is used (for example TI's SN74LVC1T45, 1.65 to 5.5 V on each side, SOT-23-6 ([TI SN74LVC1T45][lvc1t45])). That is only one candidate until U4's marking is read. Measuring D1's voltage with the box powered and the data pin's idle level answers it.
 - **The link is almost certainly single-ended logic-level serial.** An RS-485 transceiver needs at least an 8-lead package, and an RS-232 driver needs a charge pump with several capacitors ([TI RS-485 Design Guide][ti-485], [Gumstix – Serial voltages][serial-volts]). Neither is on the board; the only logic part is U4. Whether it drives 3.3 V or 5 V, and whether the data is inverted, is still to be measured (**verify**).
 - **A LoRa replacement for this box is simple:** RAK19003 UART1 TX1 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
 - **Possible cause of the failure (a guess, verify):** the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. Measure the adapter's open-circuit voltage; if it is over 10 V, that may be what killed the board, and the replacement's buck converter must be rated for it.
@@ -88,7 +90,7 @@ What this means:
 
 Use the spare ("busted") box for opening and tracing, so the Oracle keeps running. Its XBee works, so the fault is somewhere between the XBee and the display; finding the bad part is a bonus, not the goal.
 
-1. Photograph the back of the board, and U4 and D1 close up; a phone's zoom or a cheap USB microscope can read the markings that the eye can't. Small surface-mount parts carry a short marking code instead of the full part number, so look the code up together with the package type (**verify** each match against the part's datasheet).
+1. Photograph the back of the board, and U4 and R3 close up (D1 is read: KG5); a phone's zoom or a cheap USB microscope can read the markings that the eye can't. Small surface-mount parts carry a short marking code instead of the full part number, so look the code up together with the package type (**verify** each match against the part's datasheet).
 2. With power off, follow the copper (continuity beep) from the XBee socket's **DOUT pin 2** ([XBee pinout][xbee-pins]) to U4, and from U4 to the RJ11 pins. That confirms the data path.
 3. Note which RJ11 pins connect to the 9 V input jack (power to the Oracle) and to ground.
 4. Then do the powered measurements in the next section on the working box, connected to the Oracle.
@@ -303,6 +305,8 @@ flowchart LR
 - [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, UART1 on header J7, temperature range.
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
+- [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).
+- [TI – SN74LVC1T45][lvc1t45]: single-bit dual-supply level translator, one candidate for U4 (unconfirmed).
 - [Analog Devices – MAX3485][max3485]: 3.3 V RS-485/RS-422 transceiver used on many ready-made modules.
 - [Meshtastic – Seeed XIAO ESP32S3 + Wio-SX1262][xiao-wio]
 - [SparkFun – XBee breakout][sf-xbee-bob] and [2 mm XBee header][sf-2mm-header]: plugging into the station's XBee socket without a custom board.
@@ -346,5 +350,8 @@ flowchart LR
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
 [lp38691]: https://www.ti.com/product/LP38691
+[mmbz5230b]: https://www.jameco.com/Jameco/Products/ProdDS/1540965.pdf
+[smd-kg5]: https://smd.yooneed.one/code4b47.html
+[lvc1t45]: https://www.ti.com/product/SN74LVC1T45
 [rak4631]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/datasheet/
 [xiao-wio]: https://meshtastic.org/docs/hardware/devices/seeed-studio/esp32-sx1262-kit/
