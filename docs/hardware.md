@@ -59,9 +59,21 @@ No pin carries a supply voltage, and none sits at an idle UART level (logic high
 
 ## Receiver to Display Pinout
 
-- 4 wires on an RJ11 connector
-- 9 V power supply into the black box
-- **Signal type NOT confirmed.** RS-485 is a guess: Rainwise uses it on other products (its Modbus stations), but nothing confirms it for this link. It could also be RS-232 or plain logic-level (TTL) serial. The 4 wires might also include power for the display.
+- 4 wires on an RJ11 connector (standard telephone cable)
+- 9 V AC adapter into the black box; **the Oracle display has no supply of its own and is powered from the black box over the telephone cable** (owner's observation: adapter → black box → cable → Oracle). So at least two of the four wires are power and ground, which leaves at most two for data: one signal plus ground, or a differential pair.
+- Inside the box (opened once before): a bare base board with an XBee and a few small surface-mount chips whose markings are too small to read by eye. Level shifters or a line driver are the owner's guess (**verify**). There must also be a regulator, because the XBee runs on 3.3 V ([XBee 3 datasheet][xbee3-ds]) and the input is 9 V.
+- **Signal type NOT confirmed.** RS-485 is a guess: Rainwise uses it on other products (its Modbus stations), but nothing confirms it for this link. It could also be RS-232 or plain logic-level (TTL) serial.
+
+### Looking inside the black box
+
+Use the spare ("busted") box for opening and tracing, so the Oracle keeps running. Its XBee works, so the fault is somewhere between the XBee and the display; finding the bad part is a bonus, not the goal.
+
+1. Photograph both sides of the board in good light; a phone's zoom or a cheap USB microscope can read the chip markings that the eye can't. Small surface-mount parts usually carry a short marking code instead of the full part number, so look the code up together with the package type (**verify** each match against the part's datasheet).
+2. With power off, follow the copper (continuity beep) from the XBee's **DOUT pin 2** ([XBee pinout][xbee-pins]) to whichever chip it reaches, and from that chip to the RJ11 pins. That chip is the one that sets the link type.
+3. Note which RJ11 pins connect to the 9 V input jack (power to the Oracle) and to ground.
+4. Then do the powered measurements in the next section on the working box, connected to the Oracle.
+
+A plug-in RJ11-to-screw-terminal adapter or a short cable with a cut end makes the pins much easier to probe than the connector itself.
 
 ### Identifying the link with a meter
 
@@ -140,7 +152,7 @@ Plan: replace the station transmitter **and every receiver** with the same board
 
 1. **Oracle RJ11 link, with the black box running and connected.** Identify the signal type first; RS-485 is only a guess (see [Identifying the link with a meter](#identifying-the-link-with-a-meter)). Then capture the data with the matching adapter or a logic analyzer. Is it the same 32-byte packet at 9600 8N1, or re-formatted? This also shows whether the black box is the part that failed.
 2. **IP-100 RJ11 port, with nothing plugged in.** Measure each pin to ground. If any pin carries a supply voltage, note it. Compare with the Oracle box's RJ11 pinout.
-3. **Only if the two pinouts match and no pin conflicts:** try the Oracle's black box (self-powered from its 9 V) on the IP-100's RJ11 port and see whether the IP-100 shows data from it.
+3. **Only if the two pinouts match and no pin conflicts** (the black box puts its supply voltage on the cable to power the Oracle, so that pin must land on a pin the IP-100 expects as power input, or on nothing): try the Oracle's black box (self-powered from its 9 V) on the IP-100's RJ11 port and see whether the IP-100 shows data from it.
 4. **Look inside the IP-100** (unplugged): if the built-in radio is an XBee in a socket, the same socket-adapter approach as the station works there too.
 
 A standard 3.3 V RS-485 transceiver such as the MAX3485 ([Analog Devices MAX3485][max3485]) is available on cheap ready-made modules, which keeps the receiver boxes free of custom boards.
