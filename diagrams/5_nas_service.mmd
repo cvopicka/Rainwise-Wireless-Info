@@ -1,0 +1,11 @@
+flowchart LR
+  ST["Station<br/>RAK4631, station role"] -- "LoRa<br/>weather every 2 s<br/>status every 60 s" --> RX["Receiver<br/>RAK4631, raw mode"]
+  XB["XBee USB breakout<br/>(optional, no station ID)"] -.-> HOST
+  RX -- "USB cable<br/>RWP weather frames<br/>RWT status frames" --> HOST["TrueNAS host<br/>/dev/serial/by-id/usb-RAKwireless_..."]
+  IP["IP-100<br/>status.xml"]
+  subgraph APP["Docker container (TrueNAS custom app)"]
+    DEV["/dev/rainwise"] --> SVC["rainwise_service.py<br/>CRC check, decode"]
+  end
+  HOST -- "devices: mapping" --> DEV
+  IP -- "HTTP, once a minute" --> SVC
+  SVC --> DB[("rainwise.db, SQLite<br/>dataset mounted at /data<br/>tables: packets, station_status, ip100_xml")]

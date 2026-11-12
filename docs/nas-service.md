@@ -4,13 +4,21 @@
 
 ## How the data flows
 
+```mermaid
+flowchart LR
+  ST["Station<br/>RAK4631, station role"] -- "LoRa<br/>weather every 2 s<br/>status every 60 s" --> RX["Receiver<br/>RAK4631, raw mode"]
+  XB["XBee USB breakout<br/>(optional, no station ID)"] -.-> HOST
+  RX -- "USB cable<br/>RWP weather frames<br/>RWT status frames" --> HOST["TrueNAS host<br/>/dev/serial/by-id/usb-RAKwireless_..."]
+  IP["IP-100<br/>status.xml"]
+  subgraph APP["Docker container (TrueNAS custom app)"]
+    DEV["/dev/rainwise"] --> SVC["rainwise_service.py<br/>CRC check, decode"]
+  end
+  HOST -- "devices: mapping" --> DEV
+  IP -- "HTTP, once a minute" --> SVC
+  SVC --> DB[("rainwise.db, SQLite<br/>dataset mounted at /data<br/>tables: packets, station_status, ip100_xml")]
 ```
-station ──LoRa──> receiver (RAK4631, USB) ──> NAS: /dev/serial/by-id/... ──> container /dev/rainwise
-                                                                                   │
-IP-100 ──HTTP status.xml (once a minute)─────────────────────────────────────────> │ rainwise_service.py
-                                                                                   ▼
-                                                                    /mnt/<pool>/<dataset>/rainwise.db
-```
+
+The diagram is [Mermaid][mermaid], which GitHub draws directly from this file ([GitHub – creating diagrams][gh-diagrams]); the source is also in [diagrams/5_nas_service.mmd](../diagrams/5_nas_service.mmd).
 
 - The **receiver** in raw mode sends two kinds of frames over USB ([lora/README.md, "Station ID"](../lora/README.md#station-id-and-several-stations)):
   - weather packets: `RWP`, the 2-byte station ID, then the 32-byte packet, every 2 s;
@@ -253,6 +261,7 @@ On the bench, with the station on a charger and no weather data, `serial=0` and 
 - [SQLite – SQLite over a network][sqlite-net]: why not to open the live file over SMB.
 - [Python – sqlite3 `Connection.backup`][py-backup]: consistent copy of a live database.
 - [DB Browser for SQLite][sqlitebrowser]: a free viewer for the PC.
+- [Mermaid][mermaid] and [GitHub – creating diagrams][gh-diagrams]: the data-flow diagram's format; GitHub draws it from the text.
 
 [truenas-apps]: https://apps.truenas.com/managing-apps/installing-custom-apps/
 [compose-devices]: https://docs.docker.com/reference/compose-file/services/#devices
@@ -264,3 +273,5 @@ On the bench, with the station on a charger and no weather data, `serial=0` and 
 [sqlite-net]: https://www.sqlite.org/useovernet.html
 [py-backup]: https://docs.python.org/3/library/sqlite3.html#sqlite3.Connection.backup
 [sqlitebrowser]: https://sqlitebrowser.org/
+[mermaid]: https://mermaid.js.org/
+[gh-diagrams]: https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
