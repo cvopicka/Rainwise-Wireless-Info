@@ -88,7 +88,7 @@ What this means:
 
 ### Older unit: data-logger board (photos, 2025-03-06)
 
-From the owner's older (non-LR, 418 MHz) setup: the data logger that its receiver box plugged into. Recorded because it shows what Rainwise used on the receiving side of a phone-cable link; it is a different generation, so it does **not** prove anything about the LR link. Board "RainWise Inc. 05269901", battery pack beside it.
+From the owner's older (non-LR, 418 MHz) setup: a **Rainwise WS-2000** data logger (owner), with a **DB-9 RS-232 port for the computer** (connection and control) and a standard telephone jack for the receiver box. Recorded because it shows what Rainwise used on the receiving side of a phone-cable link; it is a different generation, so it does **not** prove anything about the LR link. Board "RainWise Inc. 05269901", battery pack beside it.
 
 | Ref | Marking | What it is |
 | --- | --- | --- |
@@ -100,7 +100,7 @@ From the owner's older (non-LR, 418 MHz) setup: the data logger that its receive
 | (bottom) | MAX232N | RS-232 driver/receiver: 2 drivers and 2 receivers, single 5 V supply, receiver inputs accept ±30 V ([TI MAX232][max232]) |
 | X1 | 3.6864 | 3.6864 MHz crystal, a standard frequency that divides exactly to common baud rates such as 9600 |
 
-What it tells us (all **verify**): the MAX232 is most likely the logger's PC port. It has two receivers, though, so one might take the receiver box's data. Because its receivers accept anything from ±30 V down to plain 0/5 V logic, the old receiver box could have sent either. Tracing the phone jack's pins on this board to the MAX232 or the 74HC02 would show which, and it matters for the 418 MHz station later, not for the LR work now.
+What it tells us (**verify** where marked): the DB-9 RS-232 port means the MAX232 serves the computer link (owner). It has two receivers, though, so the second one might take the receiver box's data (**verify**). Because its receivers accept anything from ±30 V down to plain 0/5 V logic, the old receiver box could have sent either. Tracing the phone jack's pins on this board to the MAX232 or the 74HC02 would show which, and it matters for the 418 MHz station later, not for the LR work now.
 
 ### Looking inside the black box
 
