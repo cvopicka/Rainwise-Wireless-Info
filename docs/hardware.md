@@ -282,12 +282,12 @@ flowchart LR
   MG -- "RJ11 ground (verify)" --- ORACLE
 ```
 
-**4. NAS receiver.** Plugs into the NAS by USB; the logger service reads it as a serial port (the device name is usually `/dev/ttyACM0` for this kind of board, verify with `ls /dev/serial/by-id/`).
+**4. NAS receiver.** Plugs into the NAS by USB, and the logging service reads it as a serial port. The NAS uses the board's stable name under `/dev/serial/by-id/` (confirmed on the NAS 2026-11-11, the same name as on the PC), mapped into the container as `/dev/rainwise`. Full data flow, settings and tables: [docs/nas-service.md](nas-service.md).
 
 ```mermaid
 flowchart LR
-  RAK["RAK4631 on RAK19003<br/>role: RECEIVE<br/>forwards 32-byte packets on USB serial"] -- "USB-C cable<br/>power + data" --> NAS["TrueNAS host<br/>/dev/ttyACM0 (verify name)"]
-  NAS --> SVC["rainwise_service.py<br/>SERIAL_PORT = USB device<br/>CRC check, decode"]
+  RAK["RAK4631 on RAK19003<br/>role: RECEIVE, raw mode<br/>RWP weather frames + RWT status frames"] -- "USB-C cable<br/>power + data" --> NAS["TrueNAS host<br/>/dev/serial/by-id/usb-RAKwireless_..."]
+  NAS -- "devices: mapping" --> SVC["rainwise_service.py (Docker app)<br/>reads /dev/rainwise<br/>CRC check, decode"]
   SVC --> DB[("rainwise.db<br/>SQLite")]
 ```
 
