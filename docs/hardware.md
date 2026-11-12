@@ -61,15 +61,35 @@ No pin carries a supply voltage, and none sits at an idle UART level (logic high
 
 - 4 wires on an RJ11 connector (standard telephone cable)
 - 9 V AC adapter into the black box; **the Oracle display has no supply of its own and is powered from the black box over the telephone cable** (owner's observation: adapter → black box → cable → Oracle). So at least two of the four wires are power and ground, which leaves at most two for data: one signal plus ground, or a differential pair.
-- Inside the box (opened once before): a bare base board with an XBee and a few small surface-mount chips whose markings are too small to read by eye. Level shifters or a line driver are the owner's guess (**verify**). There must also be a regulator, because the XBee runs on 3.3 V ([XBee 3 datasheet][xbee3-ds]) and the input is 9 V.
-- **Signal type NOT confirmed.** RS-485 is a guess: Rainwise uses it on other products (its Modbus stations), but nothing confirms it for this link. It could also be RS-232 or plain logic-level (TTL) serial.
+- **Signal type NOT confirmed, but the board photo (below) points to plain logic-level (TTL) serial.** RS-485 was the first guess, because Rainwise uses it on other products (its Modbus stations), but the board has no chip that could be an RS-485 or RS-232 transceiver.
+
+### The receiver board (photo, 2026-11-11)
+
+Owner's photo of the failed receiver box's board with the XBee removed (photo kept privately). Silkscreen: **"10300502-MK-III-LR Rx"**, board maker's mark "IMAG 94V-0", date code "29 18" (probably week 29 of 2018, **verify**). Everything on it:
+
+| Ref | What it is | Notes |
+| --- | --- | --- |
+| U1 | XBee socket (two 10-pin 2 mm rows) | Takes the receiver XBee |
+| U3 | **LP38691DT-3.3** (National/TI marking), 3.3 V low-dropout regulator, TO-252 | Powers the XBee from the 9 V input. Rated **2.7 to 10 V input**, 500 mA ([TI LP38691][lp38691]) |
+| U4 | Tiny 5- or 6-lead chip (SOT-23 size), marking not readable in the photo | The only logic chip on the board. With R1 (marked 103 = 10 kΩ) next to it and traces running toward the XBee socket and toward J2, it is most likely a single-gate buffer or level shifter between the XBee's data out and the RJ11 (**verify**: read the marking, trace the pins) |
+| D2, R2 | Small diode-shaped part with a resistor in series | Probably an indicator LED (**verify**) |
+| D1, R3, C1, C3 | 3-lead SOT-23 part plus a resistor and two capacitors, between the regulator and J2 | Function unknown (protection or filtering, **verify**) |
+| C2 | Capacitor at the regulator | |
+| J1 | DC barrel jack (9 V in) | Its center-pin trace runs **straight to J2**: the unregulated 9 V goes down the telephone cable to power the Oracle, confirming the owner's observation |
+| J2 | Modular (RJ11-type) jack | To the Oracle |
+
+What this means:
+
+- **The link is almost certainly single-ended logic-level serial.** An RS-485 transceiver needs at least an 8-lead package, and an RS-232 driver needs a charge pump with several capacitors ([TI RS-485 Design Guide][ti-485], [Gumstix – Serial voltages][serial-volts]). Neither is on the board; the only logic part is U4. Whether it drives 3.3 V or 5 V, and whether the data is inverted, is still to be measured (**verify**).
+- **A LoRa replacement for this box is simple:** RAK19003 UART1 TX1 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
+- **Possible cause of the failure (a guess, verify):** the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. Measure the adapter's open-circuit voltage; if it is over 10 V, that may be what killed the board, and the replacement's buck converter must be rated for it.
 
 ### Looking inside the black box
 
 Use the spare ("busted") box for opening and tracing, so the Oracle keeps running. Its XBee works, so the fault is somewhere between the XBee and the display; finding the bad part is a bonus, not the goal.
 
-1. Photograph both sides of the board in good light; a phone's zoom or a cheap USB microscope can read the chip markings that the eye can't. Small surface-mount parts usually carry a short marking code instead of the full part number, so look the code up together with the package type (**verify** each match against the part's datasheet).
-2. With power off, follow the copper (continuity beep) from the XBee's **DOUT pin 2** ([XBee pinout][xbee-pins]) to whichever chip it reaches, and from that chip to the RJ11 pins. That chip is the one that sets the link type.
+1. Photograph the back of the board, and U4 and D1 close up; a phone's zoom or a cheap USB microscope can read the markings that the eye can't. Small surface-mount parts carry a short marking code instead of the full part number, so look the code up together with the package type (**verify** each match against the part's datasheet).
+2. With power off, follow the copper (continuity beep) from the XBee socket's **DOUT pin 2** ([XBee pinout][xbee-pins]) to U4, and from U4 to the RJ11 pins. That confirms the data path.
 3. Note which RJ11 pins connect to the 9 V input jack (power to the Oracle) and to ground.
 4. Then do the powered measurements in the next section on the working box, connected to the Oracle.
 
@@ -282,6 +302,7 @@ flowchart LR
 - [RAKwireless – RAK4631 Quick Start Guide][rak4631-qs]: Arduino setup; uploading a sketch replaces Meshtastic but keeps the bootloader.
 - [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, UART1 on header J7, temperature range.
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
+- [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
 - [Analog Devices – MAX3485][max3485]: 3.3 V RS-485/RS-422 transceiver used on many ready-made modules.
 - [Meshtastic – Seeed XIAO ESP32S3 + Wio-SX1262][xiao-wio]
 - [SparkFun – XBee breakout][sf-xbee-bob] and [2 mm XBee header][sf-2mm-header]: plugging into the station's XBee socket without a custom board.
@@ -324,5 +345,6 @@ flowchart LR
 [rak19003]: https://docs.rakwireless.com/product-categories/wisblock/rak19003/datasheet/
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
+[lp38691]: https://www.ti.com/product/LP38691
 [rak4631]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/datasheet/
 [xiao-wio]: https://meshtastic.org/docs/hardware/devices/seeed-studio/esp32-sx1262-kit/
