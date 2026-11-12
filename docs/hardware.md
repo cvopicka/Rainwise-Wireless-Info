@@ -86,6 +86,22 @@ What this means:
 - **A LoRa replacement for this box is simple:** RAK19003 UART1 TX1 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
 - **Possible cause of the failure (a guess, verify):** the box failed **after a power outage** (owner), so a surge when power came back is a reasonable suspect, and the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. Measure the adapter's open-circuit voltage; if it is over 10 V, that may be what killed the board. For the replacement: choose a buck converter whose maximum input is well above the adapter's open-circuit voltage (most small off-the-shelf modules take far more than 9 V, **verify** the chosen module's rating), and plug the adapter into a surge protector or a UPS. The Oracle itself is fed the same raw 9 V and survived, so it is the box's 10 V regulator that has the least margin.
 
+### Older unit: data-logger board (photos, 2025-03-06)
+
+From the owner's older (non-LR, 418 MHz) setup: the data logger that its receiver box plugged into. Recorded because it shows what Rainwise used on the receiving side of a phone-cable link; it is a different generation, so it does **not** prove anything about the LR link. Board "RainWise Inc. 05269901", battery pack beside it.
+
+| Ref | Marking | What it is |
+| --- | --- | --- |
+| U4 | DS80C323 | Dallas/Maxim 8051-family microcontroller (**verify** details from its datasheet) |
+| U5 | EPROM, label "EPROM Contents Rainwise 1985-2007 OR2_CC47" | Firmware |
+| U6 | CY62256 | 32 KB static RAM (logged data) |
+| U3 | M74HC373 | 8-bit latch; the standard address latch of an 8051 with external memory (**verify**) |
+| U2 | MM74HC02 | Four NOR gates (glue logic or signal inverting, **verify**) |
+| (bottom) | MAX232N | RS-232 driver/receiver: 2 drivers and 2 receivers, single 5 V supply, receiver inputs accept ±30 V ([TI MAX232][max232]) |
+| X1 | 3.6864 | 3.6864 MHz crystal, a standard frequency that divides exactly to common baud rates such as 9600 |
+
+What it tells us (all **verify**): the MAX232 is most likely the logger's PC port. It has two receivers, though, so one might take the receiver box's data. Because its receivers accept anything from ±30 V down to plain 0/5 V logic, the old receiver box could have sent either. Tracing the phone jack's pins on this board to the MAX232 or the 74HC02 would show which, and it matters for the 418 MHz station later, not for the LR work now.
+
 ### Looking inside the black box
 
 Use the spare ("busted") box for opening and tracing, so the Oracle keeps running. Its XBee works, so the fault is somewhere between the XBee and the display; finding the bad part is a bonus, not the goal.
@@ -306,6 +322,7 @@ flowchart LR
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
 - [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).
+- [TI – MAX232][max232]: RS-232 driver/receiver on the older data-logger board.
 - [TI – SN74LVC1T45][lvc1t45]: single-bit dual-supply level translator, one candidate for U4 (unconfirmed).
 - [Analog Devices – MAX3485][max3485]: 3.3 V RS-485/RS-422 transceiver used on many ready-made modules.
 - [Meshtastic – Seeed XIAO ESP32S3 + Wio-SX1262][xiao-wio]
@@ -350,6 +367,7 @@ flowchart LR
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
 [lp38691]: https://www.ti.com/product/LP38691
+[max232]: https://www.ti.com/product/MAX232
 [mmbz5230b]: https://www.jameco.com/Jameco/Products/ProdDS/1540965.pdf
 [smd-kg5]: https://smd.yooneed.one/code4b47.html
 [lvc1t45]: https://www.ti.com/product/SN74LVC1T45
