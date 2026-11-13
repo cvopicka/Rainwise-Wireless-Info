@@ -195,7 +195,7 @@ Five signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) p
 - RAK19003 **J7 pin 4** (BOOT): not used.
 - Every other breakout pin, including pin 2 (DOUT), which the XBee drove but the RAK doesn't. The link is one-way.
 
-**Power:** a 5 V buck converter from the station battery feeds the RAK's USB-C (a cut USB cable) or VBUS. Set the buck output to 5 V with the meter *before* connecting it. In a cut USB cable, red is usually +5 V and black is ground, but check with the meter: cable colors aren't guaranteed. The battery's negative and the station's GND (breakout pin 10) are expected to be the same point, so the grounds join through both paths (verify with a continuity check before connecting).
+**Power:** a 5 V buck converter from the station battery feeds the RAK's USB-C or VBUS. The planned module ("PW-D", 6-24 V in, fixed 5 V out, 1.5 A, from an Amazon listing, **verify** on the bench) has no adjustment, but check its output with the meter *before* connecting it. The simplest connection is a USB-C plug with screw terminals (VBUS and GND only): no cut cable, and the RAK's USB-C socket stays undamaged. Mark + and − on the terminal block and check the polarity with the meter. A plug like this carries power only, so the board can't also talk to a PC through it. A cut USB cable also works; red is usually +5 V and black ground, but check with the meter, because cable colors aren't guaranteed. The battery's negative and the station's GND (breakout pin 10) are expected to be the same point, so the grounds join through both paths (verify with a continuity check before connecting).
 
 ```mermaid
 flowchart LR
@@ -253,7 +253,7 @@ Everything fiddly happens indoors; the ladder part is a swap and a plug.
 **Indoors, beforehand:**
 1. Solder 2.54 mm header pins or wires to the RAK19003's J6 and J7, and the 2 mm male headers to the SparkFun XBee breakout (both are small parts; use good light and a magnifier).
 2. Wire the breakout to the RAK19003 as in [Station wiring](#station-wiring-xbee-breakout-to-rak19003): pin 3 (DIN) to J7 RX1, pin 10 (GND) to J7 GND, pin 9 (SLEEP_RQ) to J6 SDA, pin 12 (CTS) to J6 SCL, pin 13 (ON/SLEEP) to J7 TX1. Leave the breakout's pin 1 (3.3 V) unconnected. Label each wire.
-3. Wire the 5 V buck converter's output to the RAK's USB-C (a cut USB cable) or VBUS, and set its output to 5 V with the meter before connecting.
+3. Wire the 5 V buck converter's output to the RAK's USB-C (screw-terminal USB-C plug, or a cut USB cable) or VBUS, and check with the meter that it reads 5 V, with the right polarity, before connecting.
 4. Flash the station role and run bench step 6 with this exact assembly. Put it in its enclosure with the antenna attached.
 
 **At the station:**
