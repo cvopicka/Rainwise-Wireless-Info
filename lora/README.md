@@ -13,7 +13,7 @@ Firmware for the XBee replacement planned in [docs/hardware.md](../docs/hardware
 | `rakwireless/` | RAK4631 board definition and variant files from RAK's RAK_PATCH_V2 ([RAK WisBlock PlatformIO guide][rak-pio]), unchanged. The variant files are LGPL-2.1 (inherited from the Arduino and Adafruit cores); see their headers |
 | `replay_packets.py` | Bench test: sends packets from a logger CSV to a station-role board over USB |
 
-Status: builds clean for both roles with PlatformIO (nordicnrf52 11.0.0, Adafruit nRF52 framework 1.7.0, RadioLib 7.8.1); an earlier version also built with arduino-cli (RAK nRF52 core 1.3.3). The CRC and framing code was tested on a PC against all 19,235 packets in a logged CSV, with junk bytes inserted and 1 % of the packets corrupted: every good packet was found and every corrupted one rejected. The status and command message encoding was also tested on a PC (round trip, corrupted message rejected, never mistaken for a weather packet). **On hardware (2026-11-07):** first board flashed as station; replayed packets over USB were all transmitted (`sent 23 dropped 0`). Second board flashed as receiver: replayed packets received with header and CRC intact (`good 19 bad 0`, RSSI -19 dBm, SNR 9.25 dB at a few metres). Status messages and remote commands work over the air (`s`, `1`, `2`, `0` each confirmed within 15 s), and the handshake mode survives a power cycle. **First range check (2026-11-08):** station board hung beside the weather station with its antenna within inches of the final antenna position, receiver at the farthest indoor point it will be used (basement): three status messages in a row received at RSSI -76 to -81 dBm, SNR 7.5 to 9.25 dB (SF10, 500 kHz, kit antenna) (close-range bench readings reach 10 dB, so SNR is still informative at this distance). The USB power bank then stopped, probably its light-load auto-off (the station draws little between transmissions); use one with an always-on mode for long tests. **Three receivers at once (2026-11-08):** all four boards flashed; with the replay running, all three receivers showed `good 42 bad 0` and the same packet bytes (RSSI -13 to -25 dBm on the bench). **Logger end to end (2026-11-08):** `rainwise_logger.py` on a receiver's USB port decoded the replayed packets correctly (temperature, humidity, pressure, wind, rain counter and check byte, byte 15 volts, bytes 17-18) and wrote them to a new CSV. UART1 output, the SLEEP_RQ jumper check and the ON/SLEEP pin check not yet tested.
+Status: builds clean for both roles with PlatformIO (nordicnrf52 11.0.0, Adafruit nRF52 framework 1.7.0, RadioLib 7.8.1); an earlier version also built with arduino-cli (RAK nRF52 core 1.3.3). The CRC and framing code was tested on a PC against all 19,235 packets in a logged CSV, with junk bytes inserted and 1 % of the packets corrupted: every good packet was found and every corrupted one rejected. The status and command message encoding was also tested on a PC (round trip, corrupted message rejected, never mistaken for a weather packet). **On hardware (2026-11-07):** first board flashed as station; replayed packets over USB were all transmitted (`sent 23 dropped 0`). Second board flashed as receiver: replayed packets received with header and CRC intact (`good 19 bad 0`, RSSI -19 dBm, SNR 9.25 dB at a few meters). Status messages and remote commands work over the air (`s`, `1`, `2`, `0` each confirmed within 15 s), and the handshake mode survives a power cycle. **First range check (2026-11-08):** station board hung beside the weather station with its antenna within inches of the final antenna position, receiver at the farthest indoor point it will be used (basement): three status messages in a row received at RSSI -76 to -81 dBm, SNR 7.5 to 9.25 dB (SF10, 500 kHz, kit antenna) (close-range bench readings reach 10 dB, so SNR is still informative at this distance). The USB power bank then stopped, probably its light-load auto-off (the station draws little between transmissions); use one with an always-on mode for long tests. **Three receivers at once (2026-11-08):** all four boards flashed; with the replay running, all three receivers showed `good 42 bad 0` and the same packet bytes (RSSI -13 to -25 dBm on the bench). **Logger end to end (2026-11-08):** `rainwise_logger.py` on a receiver's USB port decoded the replayed packets correctly (temperature, humidity, pressure, wind, rain counter and check byte, byte 15 volts, bytes 17-18) and wrote them to a new CSV. UART1 output, the SLEEP_RQ jumper check and the ON/SLEEP pin check not yet tested.
 
 ## Radio settings
 
@@ -78,7 +78,7 @@ Every message on the air starts with a 2-byte **station ID**, like the XBee's PA
 - **Sharing a frequency:** each station is on the air about 6 % of the time (113 ms every 2 s). Without precautions, with N stations about 0.887^(N−1) of the packets get through (pure ALOHA, [Abramson 1970][aloha]): 89 % with 2 stations, 62 % with 5, 34 % with 10, and the channel is full at about 17. Each packet carries every reading, so temperature, humidity and pressure (30 packets a minute) and rain (a running counter) survive heavy losses; wind suffers first. A stronger station usually still gets through a collision (capture effect, [Bor et al. 2016][bor2016]; margin for the SX1262 **verify**).
 - **Listen before talk (station):** to keep collisions down, the station waits a random 0-40 ms before every transmission, so two stations sending every 2 s don't stay locked in step, then checks the channel with the SX1262's channel activity detection (CAD), which on the SX126x detects a transmission anywhere in the packet, not only its preamble ([Semtech AN1200.85][an1200-85], whose example uses the RAK4631). If it hears another LoRa transmission it backs off a random 30-150 ms and checks again; after 5 tries it sends anyway, so no packet waits long enough to be replaced by the next one (worst case about 0.7 s). Stations too far apart to hear each other but both in range of one receiver can still collide (the "hidden node" case). `#define LBT_ENABLED 0` in `local_config.h` turns the channel check off; the random delay stays. The status message counts how often the channel was busy and how often a packet went out anyway.
 - **USB output is tagged:** in raw mode a receiver writes `RWP`, the station ID (2 bytes, big-endian), then the 32-byte packet. `rainwise_logger.py` and the NAS service read the tag into a `station_id` column; anything that only looks for `33 80 00` skips it. UART1 (the display and IP-100) gets plain 32-byte packets, as from an XBee.
-- **Station status on USB:** in raw mode a receiver also writes each status message from its station (and from other stations when listening to all) as a 42-byte frame: `RWT`, the station ID (2 bytes, big-endian), RSSI (dBm, signed byte), SNR (dB × 4, signed byte), then the 35-byte status message with its own CRC. The NAS service stores these in its `station_status` table as metadata about the weather data: restarts, handshake behaviour, errors, channel use and link quality, once a minute. `rainwise_logger.py` ignores them.
+- **Station status on USB:** in raw mode a receiver also writes each status message from its station (and from other stations when listening to all) as a 42-byte frame: `RWT`, the station ID (2 bytes, big-endian), RSSI (dBm, signed byte), SNR (dB × 4, signed byte), then the 35-byte status message with its own CRC. The NAS service stores these in its `station_status` table as metadata about the weather data: restarts, handshake behavior, errors, channel use and link quality, once a minute. `rainwise_logger.py` ignores them.
 
 **Logging several frequencies:** give the NAS service one receiver per frequency: list them comma-separated in `SERIAL_PORT` (e.g. `/dev/rainwise,/dev/rainwise2`) with a `devices:` line for each in `rainwise/docker-compose.yml`. Each row records which receiver (`source`) and which station (`station_id`) it came from.
 
@@ -164,7 +164,7 @@ Uploading replaces Meshtastic but keeps RAK's bootloader. To go back, drag the M
 
 ## Bench test (four kits)
 
-Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them a few metres apart with antennas attached. Never transmit without an antenna, because it can damage the radio.
+Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them a few meters apart with antennas attached. Never transmit without an antenna, because it can damage the radio.
 
 1. **First link.** Run `pio device monitor -p <R1 port>` and press `d` to switch R1 to text mode. In a second terminal, from the repo root, run `python lora/replay_packets.py <S port> rainwise_log.csv`. R1 should print an `ok` line with RSSI and SNR every 2 s, and the `bad` count should stay at 0.
 2. **Logger end to end.** Put R1 back in raw mode (`d` again, or unplug and replug), close the monitor, and run `python rainwise_logger.py --port /dev/ttyACM1 --no-xml` on it. The rows should match the replayed CSV.
@@ -180,13 +180,17 @@ Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them
 
 Five signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) plugs into the station's XBee socket in place of the XBee, through 2 mm male headers ([PRT-10112][sf-2mm-header]), and brings the 20 XBee pins out to 0.1" (2.54 mm) holes. Pin names are from Digi's through-hole pinout ([Digi pin signals][xbee-pins-802]); the RAK19003 header pins are from its datasheet ([RAK19003 datasheet][rak19003]).
 
-| Wire | Breakout (XBee pin) | RAK19003 | Signal | Direction |
-| --- | --- | --- | --- | --- |
-| 1 | **Pin 3** DIN | **J7 pin 1** RX1 | Station data, 115200 8N1 | station → RAK |
-| 2 | **Pin 10** GND | **J7 pin 3** GND | Ground | — |
-| 3 | **Pin 9** SLEEP_RQ | **J6 pin 4** SDA | Controller wakes / sleeps the radio | station → RAK |
-| 4 | **Pin 12** CTS | **J6 pin 3** SCL | "Ready" back to the controller | RAK → station |
-| 5 | **Pin 13** ON/SLEEP | **J7 pin 2** TX1 | "Awake" back to the controller | RAK → station |
+| Wire | Color | Breakout (XBee pin) | RAK19003 | Signal | Direction |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **green** | **Pin 3** DIN | **J7 pin 1** RX1 (silkscreen RX0) | Station data, 115200 8N1 | station → RAK |
+| 2 | **black** | **Pin 10** GND | **J7 pin 3** GND | Ground | — |
+| 3 | **blue** | **Pin 9** SLEEP_RQ | **J6 pin 4** SDA | Controller wakes / sleeps the radio | station → RAK |
+| 4 | **yellow** | **Pin 12** CTS | **J6 pin 3** SCL | "Ready" back to the controller | RAK → station |
+| 5 | **white** | **Pin 13** ON/SLEEP | **J7 pin 2** TX1 (silkscreen TX0) | "Awake" back to the controller | RAK → station |
+
+**Wire colors (project standard, use the same on the bench, in the docs and at the mast).** Red is used only for the +5 V supply and black only for ground. The two J6 wires follow SparkFun's Qwiic convention for I²C (blue SDA, yellow SCL) ([SparkFun Qwiic][qwiic]); the rest are this project's choice. Breakout pin 1 (3.3 V) gets no wire at all, so it can't be mistaken for a power feed. If a ready-made pigtail comes in other colors, label each wire with its signal name instead.
+
+**Connectors.** Solder the wires to both boards (the station sits outdoors; push-on Dupont contacts loosen and corrode with vibration and temperature cycling) and add strain relief. To keep the RAK removable, put one **latching** 5-pin wire-to-wire connector inline for the five signals, and bring power in separately through the USB-C screw-terminal plug (below). Keeping them apart means 5 V can never be plugged onto a 3.3 V signal pin. Ground is shared in both paths, which is fine because it is one reference point. Check the lock type: JST **XH** is common in kits but has only a friction lock ([JST XH][jst-xh]); JST **SM** (the common LED-strip connector) and JST **XA** have a latch ([JST SM][jst-sm], [JST XA][jst-xa]). Any latching connector on hand works.
 
 **Do not connect:**
 
@@ -272,6 +276,8 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 - [RAKwireless – RAK-nRF52-Arduino core][rak-core]: board support; `variant.h` gives the UART, LED and default SPI pins.
 - [Meshtastic – RAK4631 variant.h][mesh-variant]: SX1262 pins, power-enable pin 37, DIO2 RF switch, 1.8 V TCXO.
 - [RAKwireless – RAK19003 datasheet][rak19003]: UART1 on J7, 5 V input limits, J6/J7 pin order.
+- [SparkFun – Qwiic][qwiic]: the I²C wire color convention (black GND, red power, blue SDA, yellow SCL) borrowed for the J6 wires.
+- [JST – XH][jst-xh] (friction lock), [JST – SM][jst-sm] and [JST – XA][jst-xa] (latching): 2.5 mm pitch connector series for the station's signal plug.
 - [SparkFun – XBee breakout][sf-xbee-bob] and [2 mm XBee header][sf-2mm-header]: plugging into the station's XBee socket.
 - [Digi – XBee 802.15.4 pin signals][xbee-pins-802]: pin 3 DIN, 9 SLEEP_RQ, 10 GND, 12 CTS, 13 ON/SLEEP.
 - [Digi/SparkFun – XBee Series 1 datasheet][xbee-s1-ds] (PDF): pin drawing, pin 1 top-left, pin 20 top-right.
@@ -279,7 +285,7 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 - [Semtech – SX1262][sx1262]: datasheet (output power, overcurrent protection, airtime formula).
 - [Semtech – AN1200.22 LoRa Modulation Basics][an1200-22]: sensitivity vs. bandwidth and spreading factor (in the documents list on the SX1276 page).
 - [Semtech forum – SX126x time-on-air calculation][lora-toa]
-- [Digi – XBee 3 802.15.4 pin sleep][xbee-pinsleep]: SLEEP_RQ and CTS behaviour the station role can mimic.
+- [Digi – XBee 3 802.15.4 pin sleep][xbee-pinsleep]: SLEEP_RQ and CTS behavior the station role can mimic.
 - [LoRa Alliance – RP002 Regional Parameters][rp002]: US915 channel plan.
 - [eCFR – 47 CFR 15.247][ecfr-15247]: 902-928 MHz rules (500 kHz minimum 6 dB bandwidth, power, antenna gain).
 - [RAKwireless – WisBlock PlatformIO guide][rak-pio]: RAK_PATCH_V2 board files used in `rakwireless/`.
@@ -294,6 +300,10 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 [radiolib-sx1262]: https://jgromes.github.io/RadioLib/class_s_x1262.html
 [rak-core]: https://github.com/RAKWireless/RAK-nRF52-Arduino
 [mesh-variant]: https://github.com/meshtastic/firmware/blob/master/variants/nrf52840/rak4631/variant.h
+[qwiic]: https://www.sparkfun.com/qwiic
+[jst-xh]: https://www.jst-mfg.com/product/index.php?series=277&lang=en
+[jst-sm]: https://jst-mfg.com/product/detail_e.php?series=238
+[jst-xa]: https://www.jst-mfg.com/product/detail_e.php?series=272
 [rak19003]: https://docs.rakwireless.com/product-categories/wisblock/rak19003/datasheet/
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [sx1262]: https://www.semtech.com/products/wireless-rf/lora-connect/sx1262
