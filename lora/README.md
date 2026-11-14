@@ -53,7 +53,7 @@ From RAK's core ([RAK-nRF52-Arduino][rak-core], `variants/WisCore_RAK4631_Board/
 | SX1262 SCK / MISO / MOSI | 43 / 45 / 44 | On its own SPI bus (SPIM2). The core's default `SPI` goes to the WisBlock IO slot, not the radio |
 | RF switch power | 37 | Driven HIGH; DIO2 switches TX/RX |
 | TCXO | 1.8 V from DIO3 | |
-| UART1 RX1 / TX1 | 15 / 16 | RAK19003 header J7 ([RAK19003 datasheet][rak19003]). In the station role TX1 is released from the UART and drives ON/SLEEP |
+| UART1 RX1 / TX1 | 15 / 16 | RAK19003 header J7 ([RAK19003 datasheet][rak19003]). In the station role TX1 is released from the UART and drives ON/SLEEP. **The board's silkscreen says `RX0` / `TX0`** (RAK19003 Ver.E; the datasheet calls them RX1/TX1, UART1): same pins, J7 pin 1 is the square pad marked RX0 |
 | Station SLEEP_RQ in / CTS out | 13 / 14 | RAK19003 header J6 SDA / SCL, used as plain GPIO (I2C isn't used). The RAK19003's other IO pins are only on its board-to-board connectors ([RAK19003 datasheet][rak19003]) |
 | Green LED | 35 | Blinks once per packet; fast blink = radio failed to start |
 
