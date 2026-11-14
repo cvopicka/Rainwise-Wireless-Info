@@ -190,7 +190,7 @@ Five signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) p
 
 **Wire colors (project standard, use the same on the bench, in the docs and at the mast).** Red is used only for the +5 V supply and black only for ground. The two J6 wires follow SparkFun's Qwiic convention for I²C (blue SDA, yellow SCL) ([SparkFun Qwiic][qwiic]); the rest are this project's choice. Breakout pin 1 (3.3 V) gets no wire at all, so it can't be mistaken for a power feed. If a ready-made pigtail comes in other colors, label each wire with its signal name instead.
 
-**Connectors.** Solder the wires to both boards (the station sits outdoors; push-on Dupont contacts loosen and corrode with vibration and temperature cycling) and add strain relief. To keep the RAK removable, put one **latching** 5-pin wire-to-wire connector inline for the five signals, and bring power in separately through the USB-C screw-terminal plug (below). Keeping them apart means 5 V can never be plugged onto a 3.3 V signal pin. Ground is shared in both paths, which is fine because it is one reference point. Check the lock type: JST **XH** is common in kits but has only a friction lock ([JST XH][jst-xh]); JST **SM** (the common LED-strip connector) and JST **XA** have a latch ([JST SM][jst-sm], [JST XA][jst-xa]). Any latching connector on hand works.
+**Connectors.** Solder the wires to both boards (the station sits outdoors; push-on Dupont contacts loosen and corrode with vibration and temperature cycling) and add strain relief. To keep the RAK removable, put one **latching** 5-pin wire-to-wire connector inline for the five signals, and bring power in separately through the USB-C screw-terminal plug (below). Keeping them apart means 5 V can never be plugged onto a 3.3 V signal pin. Ground is shared in both paths, which is fine because it is one reference point. Check the lock type: JST **XH** is common in kits but has only a friction lock ([JST XH][jst-xh]); JST **SM** (the common LED-strip connector) and JST **XA** have a latch ([JST SM][jst-sm], [JST XA][jst-xa]). Any latching connector on hand works. **Chosen for now: JST-XH style (2.54 mm kits) from stock**, the sturdier of the two friction-lock types on hand (XH: 3 A, AWG 22-30; PH 2.0 mm: 2 A, AWG 24-32, [JST PH][jst-ph]). Because it only has a friction lock, hold the two halves together: a cable tie around both, or a dab of hot glue or silicone that can be peeled off.
 
 **Do not connect:**
 
@@ -277,7 +277,7 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 - [Meshtastic – RAK4631 variant.h][mesh-variant]: SX1262 pins, power-enable pin 37, DIO2 RF switch, 1.8 V TCXO.
 - [RAKwireless – RAK19003 datasheet][rak19003]: UART1 on J7, 5 V input limits, J6/J7 pin order.
 - [SparkFun – Qwiic][qwiic]: the I²C wire color convention (black GND, red power, blue SDA, yellow SCL) borrowed for the J6 wires.
-- [JST – XH][jst-xh] (friction lock), [JST – SM][jst-sm] and [JST – XA][jst-xa] (latching): 2.5 mm pitch connector series for the station's signal plug.
+- [JST – XH][jst-xh] and [JST – PH][jst-ph] (friction lock), [JST – SM][jst-sm] and [JST – XA][jst-xa] (latching): 2.5 mm pitch connector series for the station's signal plug.
 - [SparkFun – XBee breakout][sf-xbee-bob] and [2 mm XBee header][sf-2mm-header]: plugging into the station's XBee socket.
 - [Digi – XBee 802.15.4 pin signals][xbee-pins-802]: pin 3 DIN, 9 SLEEP_RQ, 10 GND, 12 CTS, 13 ON/SLEEP.
 - [Digi/SparkFun – XBee Series 1 datasheet][xbee-s1-ds] (PDF): pin drawing, pin 1 top-left, pin 20 top-right.
@@ -302,6 +302,7 @@ If anything is wrong and can't be fixed from indoors, the fallback is to put the
 [mesh-variant]: https://github.com/meshtastic/firmware/blob/master/variants/nrf52840/rak4631/variant.h
 [qwiic]: https://www.sparkfun.com/qwiic
 [jst-xh]: https://www.jst-mfg.com/product/index.php?series=277&lang=en
+[jst-ph]: https://www.jst-mfg.com/product/index.php?series=199&lang=en
 [jst-sm]: https://jst-mfg.com/product/detail_e.php?series=238
 [jst-xa]: https://www.jst-mfg.com/product/detail_e.php?series=272
 [rak19003]: https://docs.rakwireless.com/product-categories/wisblock/rak19003/datasheet/
