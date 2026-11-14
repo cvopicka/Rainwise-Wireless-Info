@@ -192,6 +192,21 @@ Five signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) p
 
 **Connectors.** Solder the wires to both boards (the station sits outdoors; push-on Dupont contacts loosen and corrode with vibration and temperature cycling) and add strain relief. To keep the RAK removable, put one **latching** 5-pin wire-to-wire connector inline for the five signals, and bring power in separately through the USB-C screw-terminal plug (below). Keeping them apart means 5 V can never be plugged onto a 3.3 V signal pin. Ground is shared in both paths, which is fine because it is one reference point. Check the lock type: JST **XH** is common in kits but has only a friction lock ([JST XH][jst-xh]); JST **SM** (the common LED-strip connector) and JST **XA** have a latch ([JST SM][jst-sm], [JST XA][jst-xa]). Any latching connector on hand works. **Chosen for now: JST-XH style (2.54 mm kits) from stock**, the sturdier of the two friction-lock types on hand (XH: 3 A, AWG 22-30; PH 2.0 mm: 2 A, AWG 24-32, [JST PH][jst-ph]). Because it only has a friction lock, hold the two halves together: a cable tie around both, or a dab of hot glue or silicone that can be peeled off.
 
+**Station RAK board connectors (as built 2026-11-14).** Two 4-pin JST-XH-style headers are soldered into J6 and J7 from the back of the RAK19003, so the harness plugs in from the back. Each plug position sits over one header pin; name the positions by the pin's silkscreen label (front side):
+
+| Plug | Over pin | Wire |
+| --- | --- | --- |
+| J6 plug | VDD (3.3 V output) | **empty** |
+| J6 plug | GND | **empty** |
+| J6 plug | SCL | **yellow** (CTS) |
+| J6 plug | SDA | **blue** (SLEEP_RQ) |
+| J7 plug | BOOT | **empty** |
+| J7 plug | GND | **black** |
+| J7 plug | TX0 | **white** (ON/SLEEP) |
+| J7 plug | RX0 | **green** (station data) |
+
+Check each plug position against its pin with the meter before first use: the J6 VDD and J7 BOOT positions must never get a wire.
+
 **Do not connect:**
 
 - Breakout **pin 1** (VCC 3.3 V): the station's 3.3 V supply. The RAK has its own 5 V supply.
