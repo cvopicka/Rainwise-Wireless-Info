@@ -30,10 +30,10 @@ The network ID (`ID`) and channel (`CH`) are kept out of this public document on
 
 **What the station settings mean for the LoRa replacement:**
 
-- **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read UART1 at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
+- **115200 baud at the station.** The station's controller talks to its XBee at 115200, not 9600. The station-side RAK board must read its J7 UART (RX0) at 115200 (the firmware does). A 32-byte packet takes under 3 ms at that speed.
 - **Pin sleep.** In pin sleep, SLEEP_RQ (pin 9) high puts the XBee to sleep and low wakes it. When awake and ready, the XBee drives CTS (pin 12) low and ON/SLEEP (pin 13) high; asleep, CTS goes high and ON/SLEEP low ([pin sleep][xbee-pinsleep]; [pin signals][xbee-pins-802]; the CTS/ON/SLEEP behavior is documented in Digi's [Zigbee guide][xbee-zb-pinsleep] and assumed to be the same here, **verify**). The station's controller probably wakes the XBee, waits for CTS low, sends the packet and puts it back to sleep. The firmware mimics this by default and can switch CTS to always-ready or not-driven over the air; its once-a-minute status message shows how often SLEEP_RQ wakes the radio, which answers which lines the controller uses without a logic analyzer (**verify** once installed). The station XBee's `D8` = 1 and `D9` = 1 (read 2026-11-08) mean both pins are active, but not whether the controller uses them. Two conclusions:
   - **The controller must drive SLEEP_RQ.** With `SM` = 1 and `D8` = 1, a SLEEP_RQ left high keeps the XBee asleep, so it would never transmit. The station has always transmitted, so the controller pulls pin 9 low to wake it. This supports mirror mode as the default (**verify** with the first status messages).
-  - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". Which one it reads is unknown (**verify**), so the station firmware drives both: ON/SLEEP comes from the RAK19003's TX1 pin (J7 pin 2), which the station doesn't need for serial output (added 2026-11-08, [lora/README.md](../lora/README.md#board-pins-rak4631)).
+  - **The controller might wait for ON/SLEEP (pin 13) instead of CTS (pin 12).** Both say "awake and ready". Which one it reads is unknown (**verify**), so the station firmware drives both: ON/SLEEP comes from the RAK19003's TX0 pin (J7 pin 2), which the station doesn't need for serial output (added 2026-11-08, [lora/README.md](../lora/README.md#board-pins-rak4631)).
 
 ## Station main board
 
@@ -83,7 +83,7 @@ What this means:
 
 - **The data probably leaves the board at about 5 V logic (a hypothesis, verify).** The 4.7 V Zener suggests a second, roughly 5 V supply made from the 9 V, and the obvious user of it is U4. A 6-lead chip running from 3.3 V on one side and about 5 V on the other is how a single-bit level translator is used (for example TI's SN74LVC1T45, 1.65 to 5.5 V on each side, SOT-23-6 ([TI SN74LVC1T45][lvc1t45])). That is only one candidate until U4's marking is read. Measuring D1's voltage with the box powered and the data pin's idle level answers it.
 - **The link is almost certainly single-ended logic-level serial.** An RS-485 transceiver needs at least an 8-lead package, and an RS-232 driver needs a charge pump with several capacitors ([TI RS-485 Design Guide][ti-485], [Gumstix – Serial voltages][serial-volts]). Neither is on the board; the only logic part is U4. Whether it drives 3.3 V or 5 V, and whether the data is inverted, is still to be measured (**verify**).
-- **A LoRa replacement for this box is simple:** RAK19003 UART1 TX1 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
+- **A LoRa replacement for this box is simple:** RAK19003 J7 TX0 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
 - **Possible cause of the failure (a guess, verify):** the box failed **after a power outage** (owner), so a surge when power came back is a reasonable suspect, and the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. Measure the adapter's open-circuit voltage; if it is over 10 V, that may be what killed the board. For the replacement: choose a buck converter whose maximum input is well above the adapter's open-circuit voltage (most small off-the-shelf modules take far more than 9 V, **verify** the chosen module's rating), and plug the adapter into a surge protector or a UPS. The Oracle itself is fed the same raw 9 V and survived, so it is the box's 10 V regulator that has the least margin.
 
 ### Older unit: data-logger board (photos, 2025-03-06)
@@ -218,7 +218,7 @@ flowchart LR
   end
 ```
 
-**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so the RAK stands in for the XBee's handshake: it reads SLEEP_RQ (pin 9) and drives CTS (pin 12) and ON/SLEEP (pin 13) the way the XBee did. The RAK19003 brings out only two 2.54 mm headers, J6 (3.3 V, GND, SDA, SCL) and J7 (RX1, TX1, GND, BOOT); its other IO pins are on board-to-board connectors ([RAK19003 datasheet][rak19003]). I2C isn't used, so J6's SDA and SCL serve as SLEEP_RQ and CTS, and the station's unused TX1 serves as ON/SLEEP. The CTS behavior can be changed over the air if the controller turns out to expect something else (verify; see [lora/README.md](../lora/README.md#status-messages-and-remote-commands)), and the whole assembly is wired and tested indoors so the ladder part is a module swap ([station install](../lora/README.md#station-install-one-trip)).
+**2. Station.** The RAK board takes the station's serial output from the XBee socket and runs from its own 5 V supply. The socket's 3.3 V (pin 1) is left unconnected because the RAK19003's 3.3 V pin is an output, not an input ([RAK19003 datasheet][rak19003]). The station XBee runs at 115200 baud in pin sleep (see [XBee configuration](#xbee-configuration)), so the RAK stands in for the XBee's handshake: it reads SLEEP_RQ (pin 9) and drives CTS (pin 12) and ON/SLEEP (pin 13) the way the XBee did. The RAK19003 brings out only two 2.54 mm headers, J6 (3.3 V, GND, SDA, SCL) and J7 (RX0, TX0, GND, BOOT on rev D and later; RX1, TX1 on rev B); its other IO pins are on board-to-board connectors ([RAK19003 datasheet][rak19003]). I2C isn't used, so J6's SDA and SCL serve as SLEEP_RQ and CTS, and the station's unused TX0 serves as ON/SLEEP. The CTS behavior can be changed over the air if the controller turns out to expect something else (verify; see [lora/README.md](../lora/README.md#status-messages-and-remote-commands)), and the whole assembly is wired and tested indoors so the ladder part is a module swap ([station install](../lora/README.md#station-install-one-trip)).
 
 ```mermaid
 flowchart LR
@@ -237,15 +237,15 @@ flowchart LR
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
   subgraph RAK["RAK4631 on RAK19003"]
-    RX1["J7 pin 1 RX1"]
+    RX0["J7 pin 1 RX0"]
     GND["J7 GND"]
     SDA["J6 SDA (pin 13)<br/>SLEEP_RQ in"]
     SCL["J6 SCL (pin 14)<br/>CTS out"]
-    TXS["J7 pin 2 TX1 (pin 16)<br/>ON/SLEEP out"]
+    TXS["J7 pin 2 TX0 (pin 20)<br/>ON/SLEEP out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
-  P3 --> RX1
+  P3 --> RX0
   P10 --- GND
   P9 --> SDA
   SCL --> P12
@@ -262,7 +262,7 @@ flowchart LR
   ADP["Existing 9 V adapter"] --> BUCK["Buck converter<br/>9 V to 5 V"]
   subgraph RAK["RAK4631 + RAK19003 (RECEIVE)"]
     VBUS["USB-C / VBUS 5 V"]
-    TX1["J7 pin 2 TX1"]
+    TX0["J7 pin 2 TX0"]
     V33["J6 pin 1 3.3 V out"]
     G["GND"]
   end
@@ -274,7 +274,7 @@ flowchart LR
     MG["GND"]
     AB["A / B"]
   end
-  TX1 --> DI
+  TX0 --> DI
   V33 --> VCC
   V33 --> DERE
   G --- MG
@@ -318,7 +318,7 @@ flowchart LR
 - [RadioLib][radiolib]: board-independent Arduino radio library (supported modules and platforms in its README).
 - [RAKwireless – RAK4631 datasheet][rak4631]: station-side candidate, −40 to +85 °C.
 - [RAKwireless – RAK4631 Quick Start Guide][rak4631-qs]: Arduino setup; uploading a sketch replaces Meshtastic but keeps the bootloader.
-- [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, UART1 on header J7, temperature range.
+- [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, header J7, temperature range (its J7 labels RX1/TX1 are from base-board rev B; rev D and later carry RX0/TX0, see [lora/README.md](../lora/README.md#board-pins-rak4631)).
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
 - [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).

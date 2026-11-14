@@ -2,7 +2,7 @@ flowchart LR
   ADP["Existing 9 V adapter"] --> BUCK["Buck converter<br/>9 V to 5 V"]
   subgraph RAK["RAK4631 + RAK19003 (RECEIVE)"]
     VBUS["USB-C / VBUS 5 V"]
-    TX1["J7 pin 2 TX1"]
+    TX0["J7 pin 2 TX0"]
     V33["J6 pin 1 3.3 V out"]
     G["GND"]
   end
@@ -14,7 +14,7 @@ flowchart LR
     MG["GND"]
     AB["A / B"]
   end
-  TX1 --> DI
+  TX0 --> DI
   V33 --> VCC
   V33 --> DERE
   G --- MG

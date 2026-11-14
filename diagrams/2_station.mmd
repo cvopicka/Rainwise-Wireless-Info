@@ -14,15 +14,15 @@ flowchart LR
     P2["Pin 2 DOUT<br/>unused (one-way link, verify)"]
   end
   subgraph RAK["RAK4631 on RAK19003"]
-    RX1["J7 pin 1 RX1"]
+    RX0["J7 pin 1 RX0"]
     GND["J7 GND"]
     SDA["J6 SDA (pin 13)<br/>SLEEP_RQ in"]
     SCL["J6 SCL (pin 14)<br/>CTS out"]
-    TXS["J7 pin 2 TX1 (pin 16)<br/>ON/SLEEP out"]
+    TXS["J7 pin 2 TX0 (pin 20)<br/>ON/SLEEP out"]
     VBUS["USB-C / VBUS 5 V"]
     ANT["IPEX - SMA pigtail"]
   end
-  P3 --> RX1
+  P3 --> RX0
   P10 --- GND
   P9 --> SDA
   SCL --> P12

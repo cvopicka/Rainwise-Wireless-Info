@@ -120,7 +120,7 @@ Only one program can open the serial port at a time. While testing on the PC, ru
 
 ### `lora/` (RAK4631 firmware)
 
-RadioLib sketch for the XBee replacement, with a station role (UART in, LoRa out) and a receiver role (LoRa in; plain 32-byte packets out on UART1, packets tagged with the station ID plus station status frames on USB). A PlatformIO project (`lora/platformio.ini`) with `station` and `receiver` environments, built and flashed from VS Code. Radio settings, pins, setup and the bench test are in [lora/README.md](lora/README.md).
+RadioLib sketch for the XBee replacement, with a station role (UART in, LoRa out) and a receiver role (LoRa in; plain 32-byte packets out on the J7 header UART, packets tagged with the station ID plus station status frames on USB). A PlatformIO project (`lora/platformio.ini`) with `station` and `receiver` environments, built and flashed from VS Code. Radio settings, pins, setup and the bench test are in [lora/README.md](lora/README.md).
 
 ## Test plan
 

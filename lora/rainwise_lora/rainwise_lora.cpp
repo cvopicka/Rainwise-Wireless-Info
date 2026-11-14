@@ -3,18 +3,18 @@
 
   One sketch, two roles, chosen at compile time with ROLE:
     ROLE_STATION   reads the station's 32-byte packets (115200 8N1, the
-                   station XBee's BD=7) on UART1 (and on USB, for bench
+                   station XBee's BD=7) on the J7 UART (and on USB, for bench
                    replay), checks the CRC and transmits each valid packet
                    unchanged over LoRa. Stands in for the XBee's pin-sleep
                    handshake (SLEEP_RQ in, CTS out), sends a status message
                    every minute and accepts handshake-mode commands over the
                    air, so the station can be diagnosed without a ladder trip.
     ROLE_RECEIVER  receives LoRa packets, checks length, header and CRC, and
-                   writes the 32 raw bytes to USB and UART1 at 9600 8N1, the
+                   writes the 32 raw bytes to USB and the J7 UART at 9600 8N1, the
                    same byte stream an XBee in transparent mode (AP=0) gives.
                    In text mode it shows station status and sends commands.
                    Optional per-board "rain fix" (saved setting) keeps the
-                   rain counter on UART1 continuous across station restarts,
+                   rain counter on the J7 UART continuous across station restarts,
                    for the Oracle display.
 
   Target: RAKwireless RAK4631 (nRF52840 + SX1262) on a RAK19003 base,
@@ -58,15 +58,37 @@
 // low = wake; the XBee then drives CTS (pin 12) low and ON/SLEEP (pin 13) high
 // when ready. The RAK19003 only brings these out on its 2.54 mm headers, so the
 // I2C pins on J6 (unused here) serve as plain GPIO: SDA (13) <- SLEEP_RQ,
-// SCL (14) -> CTS. The station never sends on UART1, so TX1 (16, J7 pin 2) is
-// released from the UART and drives ON/SLEEP (XBee D9=1 enables it on the
+// SCL (14) -> CTS. The station never sends on the J7 UART, so its TX pin (J7 pin 2,
+// TX0) is released from the UART and drives ON/SLEEP (XBee D9=1 enables it on the
 // station XBee, read 2026-11-08). Which lines the station MCU actually uses is
 // unconfirmed (verify); the status message and the handshake modes find out.
 #define SLEEP_RQ_PIN 13
 #define CTS_PIN 14
-#define ON_SLEEP_PIN PIN_SERIAL1_TX
+// UART on the RAK19003's J7 header. From base-board revision D on (our boards
+// are Ver.E) J7 carries RX0/TX0 = P0.19/P0.20, which the RAK4631 Arduino BSP
+// opens as Serial2 (UARTE1); revision B carried RX1/TX1 = P0.15/P0.16 = Serial1
+// (UARTE0). RAK's datasheet still shows the old labels. Found on the bench
+// 2026-11-14: Serial1 saw 0 bytes from J7. Build with -DJ7_UART=1 for a rev B
+// board.
+#ifndef J7_UART
+#define J7_UART 2
+#endif
+#if J7_UART == 2
+#define HDR_SERIAL Serial2
+#define HDR_TX_PIN PIN_SERIAL2_TX
+#define HDR_UARTE NRF_UARTE1
+#define HDR_IRQN UARTE1_IRQn
+#else
+#define HDR_SERIAL Serial1
+#define HDR_TX_PIN PIN_SERIAL1_TX
+#define HDR_UARTE NRF_UARTE0
+#define HDR_IRQN UARTE0_UART0_IRQn
+#endif
+#ifndef ON_SLEEP_PIN  // bench diagnosis: -DON_SLEEP_PIN=-1 leaves J7 TX on the UART
+#define ON_SLEEP_PIN HDR_TX_PIN
+#endif
 
-// UART1 speed per role: the station MCU talks to its XBee at 115200 (BD=7);
+// J7 UART speed per role: the station MCU talks to its XBee at 115200 (BD=7);
 // the receiver XBees output 9600 (BD=3) to the display and IP-100.
 #define STATION_UART_BAUD 115200
 #define RECEIVER_UART_BAUD 9600
@@ -411,25 +433,25 @@ void serviceHandshake() {
   }
 }
 
-// The core's Serial1.begin() connects both RX1 and TX1 to the UARTE, which then
-// owns TX1 and holds it high. The station only receives, so disconnect TX1 from
-// the UARTE to use it as a GPIO (ON/SLEEP). PSEL may only be changed while the
-// UARTE is disabled, and RX must be stopped first (nRF52840 Product
-// Specification, UARTE chapter). Runs once at startup, before any data arrives.
-void releaseUart1Tx() {
-  NVIC_DisableIRQ(UARTE0_UART0_IRQn);
-  NRF_UARTE0->EVENTS_RXTO = 0;
-  NRF_UARTE0->TASKS_STOPRX = 1;
-  while (!NRF_UARTE0->EVENTS_RXTO) {
+// HDR_SERIAL.begin() connects both J7 pins to the UARTE, which then owns TX and
+// holds it high. The station only receives, so disconnect TX from the UARTE to
+// use it as a GPIO (ON/SLEEP). PSEL may only be changed while the UARTE is
+// disabled, and RX must be stopped first (nRF52840 Product Specification, UARTE
+// chapter). Runs once at startup, before any data arrives.
+void releaseHeaderTx() {
+  NVIC_DisableIRQ(HDR_IRQN);
+  HDR_UARTE->EVENTS_RXTO = 0;
+  HDR_UARTE->TASKS_STOPRX = 1;
+  while (!HDR_UARTE->EVENTS_RXTO) {
   }
-  NRF_UARTE0->EVENTS_RXTO = 0;
-  NRF_UARTE0->EVENTS_ENDRX = 0;
-  NRF_UARTE0->ENABLE = UARTE_ENABLE_ENABLE_Disabled;
-  NRF_UARTE0->PSEL.TXD = 0xFFFFFFFF;  // disconnected
-  NRF_UARTE0->ENABLE = UARTE_ENABLE_ENABLE_Enabled;
-  NRF_UARTE0->TASKS_STARTRX = 1;  // RXD.PTR and MAXCNT are kept from begin()
-  NVIC_ClearPendingIRQ(UARTE0_UART0_IRQn);
-  NVIC_EnableIRQ(UARTE0_UART0_IRQn);
+  HDR_UARTE->EVENTS_RXTO = 0;
+  HDR_UARTE->EVENTS_ENDRX = 0;
+  HDR_UARTE->ENABLE = UARTE_ENABLE_ENABLE_Disabled;
+  HDR_UARTE->PSEL.TXD = 0xFFFFFFFF;  // disconnected
+  HDR_UARTE->ENABLE = UARTE_ENABLE_ENABLE_Enabled;
+  HDR_UARTE->TASKS_STARTRX = 1;  // RXD.PTR and MAXCNT are kept from begin()
+  NVIC_ClearPendingIRQ(HDR_IRQN);
+  NVIC_EnableIRQ(HDR_IRQN);
 }
 
 void buildStatus(uint8_t *s) {
@@ -532,9 +554,9 @@ void setup() {
   loadMode();
   serviceHandshake();
   Serial.begin(115200);              // USB CDC; baud is ignored
-  Serial1.begin(STATION_UART_BAUD);  // UART1 (RX1/TX1 on RAK19003 J7) <- XBee socket DIN, pin 3
-  if (ON_SLEEP_PIN == PIN_SERIAL1_TX) releaseUart1Tx();
-  serviceHandshake();  // drive ON/SLEEP now that TX1 is a GPIO
+  HDR_SERIAL.begin(STATION_UART_BAUD);  // J7 RX0 <- XBee socket DIN, pin 3
+  if (ON_SLEEP_PIN == HDR_TX_PIN) releaseHeaderTx();
+  serviceHandshake();  // drive ON/SLEEP now that J7 TX is a GPIO
   setupRadio();
   Serial.print("station ready, ID ");
   printId(MY_STATION_ID);
@@ -551,9 +573,9 @@ void setup() {
 void loop() {
   serviceHandshake();
   serviceLed();
-  while (Serial1.available()) {
+  while (HDR_SERIAL.available()) {
     uartBytes++;
-    if (uartFramer.push(Serial1.read())) queuePacket(uartFramer.buf, "uart");
+    if (uartFramer.push(HDR_SERIAL.read())) queuePacket(uartFramer.buf, "uart");
   }
   while (Serial.available())
     if (usbFramer.push(Serial.read())) queuePacket(usbFramer.buf, "usb");
@@ -635,7 +657,7 @@ uint32_t cmdQueuedMs = 0, lastHeardMs = 0;
 // The station's rain counter (byte 13) restarts at 0 whenever the station
 // powers up. The IP-100 ignores that; the Oracle display counts the drop as
 // (new - old) mod 256 tips of rain (docs/protocol.md). With the fix on, this
-// receiver keeps its own continuous counter and sends that to UART1 (the
+// receiver keeps its own continuous counter and sends that to the J7 UART (the
 // display) in byte 13, with byte 14 and the CRC recomputed. USB output stays
 // the station's original bytes, for the logger.
 //   Normal packets: add (new - old) mod 256 tips.
@@ -653,7 +675,7 @@ const uint8_t RAIN_MAX_TIPS = 10;
 // Off: only this board's own station (STATION_ID) is heard; everything else is
 // counted and dropped. On (for a logger such as the NAS): weather packets from
 // every station on this frequency also go to USB, each tagged with its
-// station ID. The display output (UART1), the rain fix and commands stay
+// station ID. The display output (J7 UART), the rain fix and commands stay
 // with the board's own station either way.
 bool listenAll = false;
 
@@ -969,7 +991,7 @@ void setup() {
   }
   rainOutValid = loadByte(RAIN_FILE, rainOut);
   Serial.begin(115200);  // USB CDC to the NAS/PC: raw packets, like the XBee breakout
-  Serial1.begin(RECEIVER_UART_BAUD);  // UART1 TX1 -> display line driver / local XBee
+  HDR_SERIAL.begin(RECEIVER_UART_BAUD);  // J7 TX0 -> display / IP-100
   setupRadio();
   int16_t state = radio.startReceive();
   if (state != RADIOLIB_ERR_NONE) fail("startReceive", state);
@@ -1022,9 +1044,9 @@ void loop() {
         uint8_t out[PACKET_LEN];
         memcpy(out, p, PACKET_LEN);
         applyRainFix(out);
-        Serial1.write(out, PACKET_LEN);  // UART1 (display): continuous rain counter
+        HDR_SERIAL.write(out, PACKET_LEN);  // J7 UART (display): continuous rain counter
       } else {
-        Serial1.write(p, PACKET_LEN);
+        HDR_SERIAL.write(p, PACKET_LEN);
       }
       blink();
     }

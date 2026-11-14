@@ -41,7 +41,7 @@ Quick checks: `python rainwise_logger.py --test` (CRC check value 0x31C3 and sam
 ## XBee findings
 
 - Receiver XBee: XB3-24, function set Digi XBee3 802.15.4 TH, firmware 2006, AP=0 (transparent), 9600 8N1, D6=0, D7=1 (CTS on), SM=0, RO=3, DH/DL=0/0, MY=0, EE=0 (no encryption).
-- Station XBee (read 2026-10-29): same model/function set/firmware, AP=0, **BD=7 (115200 8N1)**, D6=0, D7=1, **SM=1 (pin sleep via SLEEP_RQ pin 9)**, RO=3, **DH/DL=0/FFFF (broadcast)**, EE=0, ID/CH match. MY=0, D8=1 (SLEEP_RQ), D9=1 (ON/SLEEP output on; controller may read pin 13 instead of CTS, firmware doesn't drive it yet). Station firmware role reads UART1 at 115200; SLEEP_RQ in on J6 SDA (pin 13), CTS out on J6 SCL (pin 14); handshake mode (mirror/cts-low/released) settable over the air and saved in flash; status message every 60 s.
+- Station XBee (read 2026-10-29): same model/function set/firmware, AP=0, **BD=7 (115200 8N1)**, D6=0, D7=1, **SM=1 (pin sleep via SLEEP_RQ pin 9)**, RO=3, **DH/DL=0/FFFF (broadcast)**, EE=0, ID/CH match. MY=0, D8=1 (SLEEP_RQ), D9=1 (ON/SLEEP output on; controller may read pin 13 instead of CTS, firmware doesn't drive it yet). Station firmware role reads the J7 UART (RX0, pins 19/20 = Serial2 on RAK19003 rev D+; RAK datasheet still says RX1) at 115200; SLEEP_RQ in on J6 SDA (pin 13), CTS out on J6 SCL (pin 14); handshake mode (mirror/cts-low/released) settable over the air and saved in flash; status message every 60 s.
 - Three receivers (Oracle box, IP-100, PC breakout) receive simultaneously, so extra listeners work.
 - The original "busted" receiver box's XBee works; the fault is downstream (level shifting / RJ11 link / display).
 
