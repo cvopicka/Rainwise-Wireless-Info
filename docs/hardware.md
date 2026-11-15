@@ -113,6 +113,17 @@ Use the spare ("busted") box for opening and tracing, so the Oracle keeps runnin
 
 A plug-in RJ11-to-screw-terminal adapter or a short cable with a cut end makes the pins much easier to probe than the connector itself.
 
+### What the Oracle manual says
+
+From Rainwise's *Weather Oracle MKIII & MKIII-LR User's Guide* (rev. 7/08/14) ([Rainwise – Weather Oracle User's Guide][oracle-guide]):
+
+- **Power:** a 9 V DC, 500 mA supply plugs into the "radio transmitter" (the receiver box) and powers the display through the 5-foot telephone cable. Use only the supplied adapter.
+- **The cable matters:** "The Unit will be damaged if the wrong cable is used." Treat the cable's pin order as significant (a reversed phone cord may be the "wrong cable"; **verify**), so any tap or RAK replacement must keep the original cable's pin order.
+- **Battery backup runs the receiver box:** wooden-frame displays take 5 AAA alkaline cells, which "keep the receiver active during a power outage" for about 20 hours; the display goes dark. So power flows both ways on the cable: box to display normally, display to box during an outage. Settings and data are in non-volatile memory and survive without batteries.
+- **Diagnostic mode** (MIN, then SELECT): HUMIDITY shows the display and station software versions; TEMPERATURE the station battery voltage (now, 24-hour max and min); TIME the good packets (right) and bad packets (left); WIND SPEED a received-byte counter (wraps at 100; pressing WIND SPEED resets the counters). This is a built-in test of whether the display accepts a RAK receiver's packets. **BAROMETER in diagnostic mode is a factory reset that erases all data.**
+
+Bench observation (2026-11-15, owner): with the 9 V adapter in the box and the box's cable on a screw-terminal jack (no display), the box's green status light stays off; with the display connected it lights. On the screw-terminal jack (clip down, terminals 1-4 left to right, 4 = red): terminal 4 = the 9 V jack's center pin (+9 V), terminal 3 = the jack's sleeve (ground), so 1 and 2 are the data candidates. Because the box seems to need the display attached, measure with the display connected, through a duplex (splitter) phone adapter so the original cable stays in place.
+
 ### Identifying the link with a meter
 
 Box powered and connected to the display. First find ground: the RJ11 pin with 0 Ω (continuity) to the minus side of the 9 V adapter, with power off. Then, powered, measure every other pin to that ground. Because packets arrive every 2 s, an analog meter's needle will twitch on data lines, which is a quick way to spot them.
@@ -321,6 +332,7 @@ flowchart LR
 - [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, header J7, temperature range (its J7 labels RX1/TX1 are from base-board rev B; rev D and later carry RX0/TX0, see [lora/README.md](../lora/README.md#board-pins-rak4631)).
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
+- [Rainwise – Weather Oracle MKIII & MKIII-LR User's Guide][oracle-guide] (rev. 7/08/14; the PDF is on the product's support page, **verify** link): power, cable warning, battery backup of the receiver, diagnostic mode.
 - [Mouser – CUI SMI6B series][smi6b] and [Digi-Key – SMI6B listing][dk-smi6b]: the Oracle's 9 V wall adapter family (regulated, 6 W, overvoltage and short-circuit protection, center positive).
 - [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).
 - [TI – MAX232][max232]: RS-232 driver/receiver on the older data-logger board.
@@ -368,6 +380,7 @@ flowchart LR
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
 [lp38691]: https://www.ti.com/product/LP38691
+[oracle-guide]: https://rainwise.com/oracle-multi-display
 [smi6b]: https://eu.mouser.com/new/cui-inc/cui-smi6b-acdc-power-supply/
 [dk-smi6b]: https://www.digikey.com/en/products/detail/cui-inc/SMI6B-5-4-P6/10264713
 [max232]: https://www.ti.com/product/MAX232
