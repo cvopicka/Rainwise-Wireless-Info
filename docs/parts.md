@@ -70,11 +70,13 @@ Not bought for this project, so not counted in the total, but you need them to b
 | **Cables and power** | | |
 | USB-C **data** cables, one per board on the PC | Flashing and monitoring | A charge-only cable powers the board but the PC never sees it |
 | USB charger or power bank with an "always on" mode | Powering a board away from the PC (bench and range tests) | Ordinary power banks shut off at the station's light load |
-| **Software (free)** | | |
-| [PlatformIO][platformio] | Building and flashing the firmware | |
-| Python 3 with [pyserial][pyserial] | `rainwise_logger.py`, `replay_packets.py` | |
-| [PulseView][pulseview] with the sigrok `fx2lafw` firmware | The logic analyzer | |
-| [Digi XCTU][xctu] | Reading and setting the XBees | |
+| **Software** | | |
+| [PlatformIO][platformio] | Building and flashing the firmware | Free |
+| Python 3 with [pyserial][pyserial] | `rainwise_logger.py`, `replay_packets.py` | Free |
+| [PulseView][pulseview] with the sigrok `fx2lafw` firmware | The logic analyzer | Free |
+| [Digi XCTU][xctu] | Reading and setting the XBees | Free |
+| [Visual Studio Code][vscode] | Editing the code and docs; the PlatformIO and Claude Code extensions run inside it | Free |
+| [Claude Code][claude-code] (Anthropic) | AI coding partner: decoding the protocol, writing the firmware, logger and NAS service, the docs, and working through each bench test | Needs a paid Claude plan; not counted |
 
 ## Shipping
 
@@ -106,7 +108,7 @@ One line per order.
 - [XH connector kit (Amazon)][xh-kit]
 - [HiLetgo logic analyzer (Amazon)][logic], [Goupchn test hook clips (Amazon)][hooks]
 - [Waveshare XBee USB board (Amazon)][waveshare-xbee]
-- Software: [PlatformIO][platformio], [pyserial][pyserial], [PulseView][pulseview], [Digi XCTU][xctu]
+- Software: [PlatformIO][platformio], [pyserial][pyserial], [PulseView][pulseview], [Digi XCTU][xctu], [VS Code][vscode], [Claude Code][claude-code]
 - Rainwise: [MK-III RTI-LR][rw-mk3], [Oracle Multi-Display][rw-oracle], [IP-100][rw-ip100]
 - SparkFun: [BOB-08276][bob-08276], [PRT-10112][prt-10112], [PRT-00115][prt-00115], [PRT-10158][prt-10158], [DEV-15096][dev-15096]
 
@@ -124,6 +126,8 @@ One line per order.
 [rw-mk3]: https://rainwise.com/mk-iii-rti-lr-sensor-assembly-with-rain-gauge
 [rw-oracle]: https://rainwise.com/oracle-multi-display
 [rw-ip100]: https://rainwise.com/ip-100-network-interface
+[vscode]: https://code.visualstudio.com/
+[claude-code]: https://claude.com/claude-code
 [bob-08276]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
 [prt-10112]: https://www.sparkfun.com/straight-header-male-pth-2mm-10-pin.html
 [prt-00115]: https://www.sparkfun.com/straight-header-female-pth-0-1in-40-pin.html
