@@ -110,7 +110,7 @@ How to read it:
 - **wakes 0 and SLEEP_RQ high** while **weather packets** stay at 0: the controller isn't waking the radio, or the SLEEP_RQ wire is loose. With CTS held high the controller may be waiting; try `1` (cts-low).
 - **UART bytes rising but weather packets not**: data arrives but doesn't frame, e.g. wrong baud rate.
 - **Weather packets rising**: the link works; the receivers are getting data.
-- **Channel busy rising**: the channel check heard something: another LoRa device on this frequency (another station, or someone else's equipment), or a false alarm from noise. On the bench on 2026-11-15 it rose about once every three transmissions with no other station on the air (receivers saw no other station and no bad packets), in normal and power-save mode alike, after much lower counts on earlier days; the cause (local noise, or the channel check's default sensitivity) is **verify**. Each one costs only a short back-off. **Sent anyway** rising as well means the channel is really crowded, and moving to another frequency (`LORA_FREQ_MHZ`) is the fix.
+- **Channel busy rising**: the channel check heard something: another LoRa device on this frequency (another station, or someone else's equipment), or a false alarm from noise. On 2026-11-15 it rose on almost every transmission with no other station on the air; the scanner traced that to the station board's own channel check (see [Choose the station board](#choose-the-station-board-do-this-first)), and a different board with the threshold at 25 read 0. Each one costs only a short back-off. **Sent anyway** rising as well means the channel is really crowded, and moving to another frequency (`LORA_FREQ_MHZ`) is the fix.
 - **Battery**: the station's battery voltage from byte 15 of its last weather packet (`unknown` until one arrives); the same formula as the logger's `station_v`.
 
 Commands, typed in a receiver's text mode: `0` / `1` / `2` set the handshake mode, `P` (twice within 5 s) turns station power save on or off, `s` asks for status now. The receiver sends the command just after it next hears the station (the station listens right after its own transmissions), plus one try after 3 s of silence, and **repeats it after each station transmission until a reply carries its sequence number** (`command seq N confirmed`), up to 5 sends. The station's reply shows the new settings and the sequence number under "last command". With weather packets flowing a command is confirmed in under a second; with the station idle (status only, once a minute) it can take up to a minute. After 5 unconfirmed sends the receiver says so; type it again. Sequence numbers start at a random value when a receiver starts, so an old reply can't confirm a new command.
@@ -166,9 +166,30 @@ PlatformIO downloads the compiler, the Adafruit nRF52 framework, the upload tool
 
 Uploading replaces Meshtastic but keeps RAK's bootloader. To go back, drag the Meshtastic UF2 onto the board's USB drive ([RAK4631 Quick Start][rak4631-qs]).
 
+## Choose the station board (do this first)
+
+**Before deciding which board becomes the station, scan every board with the scanner.** Any setup needs at least two boards, and they are not all equal: on 2026-11-15 one of four RAK4631 modules from the same order had a channel check (CAD) that reported "busy" 50-70 % of the time on an empty channel, while the others read 0-12 % (the antennas were swapped to prove it was the module, not the antenna). That board works normally as a receiver, which never runs the channel check, but as the station it made listen-before-talk useless: the channel looked busy almost every time, so packets waited for back-offs and went out anyway.
+
+The scanner is a third build role that never transmits. It runs the channel check back to back, about 45 times a second, on seven frequencies across the band and on 919 MHz with several thresholds (10 s each, about 100 s per sweep), and prints how often each said "busy" together with the signal strength (RSSI). A real signal shows a higher RSSI at busy moments; false alarms sit at the background level.
+
+1. Antenna on every board. Flash the scanner: `pio run -e scanner -t upload --upload-port <port>` (as many boards at once as you have USB ports; scanning side by side is the fairest comparison).
+2. Read at least two sweeps: `pio device monitor -p <port>`. Each line: frequency, threshold (`peak`), number of checks, `busy`, the busy rate over all sweeps, and RSSI.
+3. **Pass:** at your frequency (919 MHz unless `LORA_FREQ_MHZ` is changed) and the station's threshold (`peak 25`, `LBT_DET_PEAK`), **busy under 1 %**. Pick the cleanest passing board as the station; the others become receivers. If none passes, raise `LBT_DET_PEAK` (the 919 MHz lines at peak 27 and 30 show what that would do).
+4. Flash the chosen roles (station, receiver) over the scanner. Settings saved in flash (handshake, power save, rain fix) belong to a board, so set them after choosing.
+
+Bench results 2026-11-15, three boards side by side (busy per check):
+
+| Board | 903-927 MHz at peak 23 (RadioLib default) | 919 MHz at peak 25 / 27 / 30 |
+| --- | --- | --- |
+| A (now receiverOracle) | 0-6 % | 0 / 0.2 / 0 % |
+| B (now the station) | 3-12 % | 0-0.3 / 0 / 0 % |
+| C (was the station, now receiverIP100) | 52-71 % | 27-29 / 13 / 1.7 % |
+
+Background RSSI was about -95 to -101 dBm on all three, and no higher at busy moments: false alarms, not other transmitters. After the swap, the new station sent 65 replayed packets with `channel busy 0`. The station's threshold is now 25 (`LBT_DET_PEAK`) instead of RadioLib's 23, which comes from Semtech's table for 125 kHz while this link uses 500 kHz (the right value for 500 kHz is **verify**).
+
 ## Bench test (four kits)
 
-Flash one board as **station** (S) and three as **receivers** (R1-R3). Keep them a few meters apart with antennas attached. Never transmit without an antenna, because it can damage the radio.
+Flash one board as **station** (S) and three as **receivers** (R1-R3), choosing the station with the scanner first (previous section). Keep them a few meters apart with antennas attached. Never transmit without an antenna, because it can damage the radio.
 
 1. **First link.** Run `pio device monitor -p <R1 port>` and press `d` to switch R1 to text mode. In a second terminal, from the repo root, run `python lora/replay_packets.py <S port> rainwise_log.csv`. R1 should print an `ok` line with RSSI and SNR every 2 s, and the `bad` count should stay at 0.
 2. **Logger end to end.** Put R1 back in raw mode (`d` again, or unplug and replug), close the monitor, and run `python rainwise_logger.py --port /dev/ttyACM1 --no-xml` on it. The rows should match the replayed CSV.

@@ -98,7 +98,7 @@ This is data *about* the data, from each LoRa station's status message. It shows
 | `wakes`, `avg_awake_ms`, `max_awake_ms` | How often the controller woke the radio in the last minute, and for how long | About 30 a minute once installed |
 | `weather_packets`, `uart_bytes` | Totals since the station started | Rising together |
 | `tx_errors`, `dropped` | Totals: failed transmissions; packets replaced before they could be sent | 0 |
-| `channel_busy`, `sent_anyway` | Totals: listen-before-talk found the channel busy; sent after 5 busy checks | `sent_anyway` near 0. `channel_busy` can rise steadily from noise or false alarms (about 1 in 3 transmissions on the bench on 2026-11-15, cause **verify**); both climbing means a crowded frequency |
+| `channel_busy`, `sent_anyway` | Totals: listen-before-talk found the channel busy; sent after 5 busy checks | `sent_anyway` near 0. `channel_busy` near 0 too; steady climbing with no other station means a station board with an over-eager channel check (lora/README.md, "Choose the station board"); both climbing means a crowded frequency |
 | `power_save` | Station power save: 1 on, 0 off (empty for rows from status version 2, before 2026-11-15) | What you set |
 | `battery_raw`, `battery_v` | Station battery: byte 15 of the station's last weather packet, and volts (0.0291 × raw + 0.20, the same as `packets.station_v`); empty until the station has received a packet | Overnight minimum about 6.4 V (Oracle diagnostic, 2026-11-15) |
 | `raw_hex` | The status message (37 bytes; 35 in version 2) | |

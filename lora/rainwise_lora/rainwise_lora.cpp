@@ -38,6 +38,7 @@
 
 #define ROLE_STATION 1
 #define ROLE_RECEIVER 2
+#define ROLE_SCANNER 3   // bench diagnostic: channel activity survey
 #ifndef ROLE
 #define ROLE ROLE_RECEIVER
 #endif
@@ -377,6 +378,27 @@ uint8_t lastBattery = 0;  // byte 15 of the last weather packet (0 = none yet)
 #ifndef LBT_ENABLED
 #define LBT_ENABLED 1
 #endif
+// CAD detection threshold (detPeak). RadioLib's default, SF + 13 = 23, comes
+// from Semtech's table for 125 kHz; at our 500 kHz the scanner (bench,
+// 2026-11-15) measured 0-12 % false "busy" results per check at 23 on good
+// boards and 0-0.3 % at 25, with no rise in RSSI (false alarms, not signals).
+// One board read 50-70 % at 23 and 29 % at 25: choose the station board with
+// the scanner (README, "Choose the station board"). Higher = fewer false alarms
+// but a distant station is noticed less often.
+#ifndef LBT_DET_PEAK
+#define LBT_DET_PEAK 25
+#endif
+const ChannelScanConfig_t LBT_CAD = {
+    .cad = {
+        .symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
+        .detPeak = LBT_DET_PEAK,
+        .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+        .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+        .timeout = 0,
+        .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+        .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK,
+    },
+};
 const uint16_t JITTER_MAX_MS = 400;
 const uint16_t BACKOFF_MIN_MS = 30, BACKOFF_MAX_MS = 150;
 const uint8_t LBT_MAX_TRIES = 5;
@@ -672,7 +694,7 @@ void loop() {
     if (txWaiting && (int32_t)(millis() - nextTryMs) >= 0) {
       radioIrq = false;
       if (radioState == RS_SLEEP) radio.standby();  // wake the SX1262 first
-      if (LBT_ENABLED && radio.startChannelScan() == RADIOLIB_ERR_NONE) {
+      if (LBT_ENABLED && radio.startChannelScan(LBT_CAD) == RADIOLIB_ERR_NONE) {
         radioState = RS_CAD;
         cadStartMs = millis();
       } else {
@@ -1190,6 +1212,104 @@ void loop() {
   sendCommandIfDue(own);  // only our own station's transmission opens its listen window
 }
 
+// ===================== Scanner (bench diagnostic) =====================
+#elif ROLE == ROLE_SCANNER
+
+// Surveys what the station's channel check (CAD) hears, without transmitting.
+// It cycles through a list of settings, spends DWELL_MS on each running CAD
+// back to back, and after each CAD briefly switches to receive to read the
+// instantaneous RSSI (signal strength in the 500 kHz channel). One line per
+// setting: how often CAD said "busy", and the RSSI overall and at busy moments.
+// A real signal shows a raised RSSI when busy; false alarms show the noise
+// floor. Station defaults (RadioLib, from Semtech's table for 125 kHz):
+// 4 symbols, detPeak = SF + 13 = 23, detMin = 10. The 919 MHz entries with a
+// higher detPeak test whether a less sensitive check stops the alarms.
+// Output: USB serial, 115200, plain text. Our own station on 919 MHz adds a
+// little (one ~0.1 s status message a minute, or a packet every 2 s).
+struct ScanSetting {
+  float mhz;
+  uint8_t detPeak;
+};
+const ScanSetting SETTINGS[] = {
+    {903.0, 23}, {907.0, 23}, {911.0, 23}, {915.0, 23}, {919.0, 23},
+    {923.0, 23}, {927.0, 23}, {919.0, 25}, {919.0, 27}, {919.0, 30},
+};
+const uint8_t N_SETTINGS = sizeof(SETTINGS) / sizeof(SETTINGS[0]);
+const uint32_t DWELL_MS = 10000;
+uint32_t totalCad[N_SETTINGS], totalBusy[N_SETTINGS];
+uint8_t current = 0;
+uint32_t sweep = 0;
+
+void setup() {
+  pinMode(LED_PIN, OUTPUT);
+  Serial.begin(115200);
+  setupRadio();
+  delay(2000);
+  Serial.println("scanner: channel activity survey, SF10 / 500 kHz, sync word ignored by CAD");
+  Serial.println("columns: MHz, detPeak, CADs, busy (this dwell), busy % (all sweeps), RSSI avg / max / avg when busy");
+}
+
+void loop() {
+  const ScanSetting &st = SETTINGS[current];
+  radio.setFrequency(st.mhz);
+  ChannelScanConfig_t cfg = {
+      .cad = {
+          .symNum = RADIOLIB_SX126X_CAD_ON_4_SYMB,
+          .detPeak = st.detPeak,
+          .detMin = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+          .exitMode = RADIOLIB_SX126X_CAD_PARAM_DEFAULT,
+          .timeout = 0,
+          .irqFlags = RADIOLIB_IRQ_CAD_DEFAULT_FLAGS,
+          .irqMask = RADIOLIB_IRQ_CAD_DEFAULT_MASK,
+      },
+  };
+  uint32_t n = 0, busy = 0;
+  float rssiSum = 0, rssiMax = -200, busyRssiSum = 0;
+  uint32_t start = millis();
+  while (millis() - start < DWELL_MS) {
+    int16_t r = radio.scanChannel(cfg);
+    bool isBusy = r == RADIOLIB_LORA_DETECTED;
+    radio.startReceive();
+    delay(2);  // let the receiver settle before reading RSSI
+    float rssi = radio.getRSSI(false);
+    radio.standby();
+    n++;
+    rssiSum += rssi;
+    if (rssi > rssiMax) rssiMax = rssi;
+    if (isBusy) {
+      busy++;
+      busyRssiSum += rssi;
+      blink();
+    }
+    serviceLed();
+  }
+  totalCad[current] += n;
+  totalBusy[current] += busy;
+  Serial.print(st.mhz, 1);
+  Serial.print(" MHz  peak ");
+  Serial.print(st.detPeak);
+  Serial.print("  CAD ");
+  Serial.print(n);
+  Serial.print("  busy ");
+  Serial.print(busy);
+  Serial.print("  (all sweeps ");
+  Serial.print(totalCad[current] ? 100.0 * totalBusy[current] / totalCad[current] : 0, 1);
+  Serial.print(" %)  RSSI avg ");
+  Serial.print(n ? rssiSum / n : 0, 1);
+  Serial.print(" max ");
+  Serial.print(rssiMax, 1);
+  Serial.print(" busy-avg ");
+  if (busy) Serial.print(busyRssiSum / busy, 1);
+  else Serial.print("-");
+  Serial.println(" dBm");
+  if (++current == N_SETTINGS) {
+    current = 0;
+    Serial.print("--- sweep ");
+    Serial.print(++sweep);
+    Serial.println(" done ---");
+  }
+}
+
 #else
-#error "ROLE must be ROLE_STATION or ROLE_RECEIVER"
+#error "ROLE must be ROLE_STATION, ROLE_RECEIVER or ROLE_SCANNER"
 #endif
