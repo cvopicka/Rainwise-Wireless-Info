@@ -42,13 +42,13 @@ The existing Rainwise equipment this project works with. Bought before the proje
 | [Oracle Multi-Display][rw-oracle] | 801-000 (as shown on the page; **verify**) | Indoor display, fed by its XBee receiver box over a phone cable | Gets its own RAK receiver |
 | [IP-100 Network Interface][rw-ip100] | 802-0001 | Internet gateway with its own XBee receiver; serves `status.xml` | Gets its own RAK receiver |
 
-**Older unit (second station, not yet part of the LoRa replacement).** About 15 years older than the MK-III-LR and no longer listed by Rainwise, so there are no links. Also not counted.
+**Older unit (second station, not yet part of the LoRa replacement).** About 15 years older than the MK-III-LR and no longer listed by Rainwise, so there are no links. Also not counted. As recalled, every indoor device has its own external receiver; this unit is at another site, so the details wait for a visit.
 
 | Item | Role | Notes |
 | --- | --- | --- |
-| Older Rainwise station (model name **verify**) | Outdoor sensors and controller | 418 MHz radio: a Linx TXM-418-LC transmitter on its own small board, on a 3-wire lead to the main board ([docs/hardware.md](hardware.md)) |
-| Rainwise WS-2000 data logger | Receives the station's data via its receiver box; connects to a PC | DB-9 RS-232 to the PC, phone jack for the receiver box |
-| IP-100 Network Interface | Internet gateway for this station | A second unit, separate from the one above (how it gets its data **verify**) |
+| Rainwise MK-III (the model before the LR) | Outdoor sensors and controller | 418 MHz radio: a Linx TXM-418-LC transmitter on its own small board, on a 3-wire lead to the main board ([docs/hardware.md](hardware.md)) |
+| Rainwise WS-2000 data logger | Logs the station's data; connects to a PC | DB-9 RS-232 to the PC, phone jack for its own external 418 MHz receiver box (**verify**) |
+| IP-100 Network Interface | Internet gateway for this station | A second unit, separate from the one above, with its own external 418 MHz receiver |
 
 ## Also needed (already on hand)
 
