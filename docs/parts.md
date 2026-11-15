@@ -33,6 +33,8 @@ Bought for this project but staying on the bench.
 | [Goupchn SMD IC Test Hook Clips with Silicone Jumper Wires, 10 Colors][hooks] | 1 set | tool | $20.99 | Amazon | Clipping onto header pins and test points | |
 | [Waveshare UART Communication Board Supports XBee Connectivity][waveshare-xbee] (CP2102) | 1 | tool | $9.99 | Amazon | Reading the XBees on the PC (XCTU) | Bought 2024, earlier in the project |
 | RJ11 jack with 4 screw terminals | — | tool | — | Owner's stock | Breakout for measuring the Oracle box's phone cable | Not counted |
+| Pine64 Pinecil soldering iron (V2, **verify**) | — | tool | — | Owner's stock | Headers and harness | Not counted |
+| RadioShack 22-807 multimeter | — | tool | — | Owner's stock | Voltages, continuity, battery checks | Not counted |
 
 ## Shipping
 
