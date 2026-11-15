@@ -42,6 +42,7 @@ The existing Rainwise equipment this project works with. Bought before the proje
 | [MK-III RTI-LR Sensor Assembly with Rain Gauge][rw-mk3] | 800-0009 | The outdoor station: sensors, controller, XBee radio | Ours is labeled MK-III-LR; Rainwise rates the XBee link at about 1 mile line of sight. This project replaces its XBee with a RAK4631 |
 | [Oracle Multi-Display][rw-oracle] | 801-000 (as shown on the page; **verify**) | Indoor display, fed by its XBee receiver box over a phone cable | Gets its own RAK receiver |
 | [IP-100 Network Interface][rw-ip100] | 802-0001 | Internet gateway with its own XBee receiver; serves `status.xml` | Gets its own RAK receiver |
+| CUI wall adapter for the Oracle's receiver box | SMI6B-9-4-P5R | Powers the receiver box, and the Oracle through the phone cable | 9 V DC, 0.66 A, regulated switching supply, center positive (label); 2.1 mm right-angle plug per the P5R suffix (**verify**) ([Mouser – SMI6B series][smi6b]) |
 | [MK-III, SLA Battery][rw-battery] (Duracell Ultra 6V 5AH AGM SLA, F1 terminals) | 600997 | Station battery, charged by the 0.6 W solar panel | F1 = 0.187" quick-disconnect tabs: the RAK's power tap uses 0.187" piggyback Fastons |
 
 **Older unit (second station, not yet part of the LoRa replacement).** About 15 years older than the MK-III-LR and no longer listed by Rainwise, so there are no links. Also not counted. As recalled, every indoor device has its own external receiver; this unit is at another site, so the details wait for a visit.
@@ -134,6 +135,7 @@ One line per order.
 [claude-code]: https://claude.com/claude-code
 [rw-battery]: https://rainwise.com/mk-iii-sla-battery
 [meter-fuse]: https://www.amazon.com/dp/B07KZRR3GL
+[smi6b]: https://eu.mouser.com/new/cui-inc/cui-smi6b-acdc-power-supply/
 [bob-08276]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
 [prt-10112]: https://www.sparkfun.com/straight-header-male-pth-2mm-10-pin.html
 [prt-00115]: https://www.sparkfun.com/straight-header-female-pth-0-1in-40-pin.html

@@ -60,7 +60,7 @@ No pin carries a supply voltage, and none sits at an idle UART level (logic high
 ## Receiver to Display Pinout
 
 - 4 wires on an RJ11 connector (standard telephone cable)
-- 9 V AC adapter into the black box; **the Oracle display has no supply of its own and is powered from the black box over the telephone cable** (owner's observation: adapter → black box → cable → Oracle). So at least two of the four wires are power and ground, which leaves at most two for data: one signal plus ground, or a differential pair.
+- 9 V DC wall adapter into the black box (CUI SMI6B-9-4-P5R, regulated switching supply, 9 V 0.66 A, center positive, per its label; see the receiver board notes below); **the Oracle display has no supply of its own and is powered from the black box over the telephone cable** (owner's observation: adapter → black box → cable → Oracle). So at least two of the four wires are power and ground, which leaves at most two for data: one signal plus ground, or a differential pair.
 - **Signal type NOT confirmed, but the board photo (below) points to plain logic-level (TTL) serial.** RS-485 was the first guess, because Rainwise uses it on other products (its Modbus stations), but the board has no chip that could be an RS-485 or RS-232 transceiver.
 
 ### The receiver board (photo, 2026-11-11)
@@ -76,7 +76,7 @@ Owner's photo of the failed receiver box's board with the XBee removed (photo ke
 | D1 | SOT-23 marked **KG5** = **MMBZ5230B, 4.7 V Zener diode** ([Diodes Inc. MMBZ52xxB datasheet][mmbz5230b], [SMD code database][smd-kg5]) | With R3 (marking not readable) and C1/C3 next to it, most likely a resistor-plus-Zener supply of about 4.7 V taken from the 9 V input (**verify**, see below) |
 | R3, C1, C3 | Resistor and two capacitors around D1 | |
 | C2 | Capacitor at the regulator | |
-| J1 | DC barrel jack (9 V in) | Its center-pin trace runs **straight to J2**: the unregulated 9 V goes down the telephone cable to power the Oracle, confirming the owner's observation |
+| J1 | DC barrel jack (9 V in) | Its center-pin trace runs **straight to J2**: the adapter's 9 V goes down the telephone cable to power the Oracle, confirming the owner's observation |
 | J2 | Modular (RJ11-type) jack | To the Oracle |
 
 What this means:
@@ -84,7 +84,7 @@ What this means:
 - **The data probably leaves the board at about 5 V logic (a hypothesis, verify).** The 4.7 V Zener suggests a second, roughly 5 V supply made from the 9 V, and the obvious user of it is U4. A 6-lead chip running from 3.3 V on one side and about 5 V on the other is how a single-bit level translator is used (for example TI's SN74LVC1T45, 1.65 to 5.5 V on each side, SOT-23-6 ([TI SN74LVC1T45][lvc1t45])). That is only one candidate until U4's marking is read. Measuring D1's voltage with the box powered and the data pin's idle level answers it.
 - **The link is almost certainly single-ended logic-level serial.** An RS-485 transceiver needs at least an 8-lead package, and an RS-232 driver needs a charge pump with several capacitors ([TI RS-485 Design Guide][ti-485], [Gumstix – Serial voltages][serial-volts]). Neither is on the board; the only logic part is U4. Whether it drives 3.3 V or 5 V, and whether the data is inverted, is still to be measured (**verify**).
 - **A LoRa replacement for this box is simple:** RAK19003 J7 TX0 (3.3 V logic) into the same data pin, through a buffer if the Oracle needs 5 V, plus a buck converter from the same 9 V adapter. The 9 V continues straight to the Oracle, as it does today.
-- **Possible cause of the failure (a guess, verify):** the box failed **after a power outage** (owner), so a surge when power came back is a reasonable suspect, and the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. Measure the adapter's open-circuit voltage; if it is over 10 V, that may be what killed the board. For the replacement: choose a buck converter whose maximum input is well above the adapter's open-circuit voltage (most small off-the-shelf modules take far more than 9 V, **verify** the chosen module's rating), and plug the adapter into a surge protector or a UPS. The Oracle itself is fed the same raw 9 V and survived, so it is the box's 10 V regulator that has the least margin.
+- **Possible cause of the failure (a guess, verify):** the box failed **after a power outage** (owner), so a surge when power came back is a reasonable suspect, and the regulator's 10 V input limit leaves little margin over a 9 V adapter. An unregulated wall adapter can measure well above its label with a light load. The adapter now in use is a **regulated** switching supply (CUI SMI6B-9-4-P5R: 9 V, 0.66 A, 6 W, center positive, 2.1 mm plug per the P5R suffix (**verify**), with overvoltage and short-circuit protection ([Mouser – CUI SMI6B series][smi6b], [Digi-Key – SMI6B listing][dk-smi6b])), so it shouldn't overshoot; its date code suggests 2023, so whether it was the adapter in use when the box failed is **verify**. Measure its open-circuit voltage anyway; if it is over 10 V, that may be what killed the board. For the replacement: choose a buck converter whose maximum input is well above the adapter's open-circuit voltage (most small off-the-shelf modules take far more than 9 V, **verify** the chosen module's rating), and plug the adapter into a surge protector or a UPS. The Oracle itself is fed the same raw 9 V and survived, so it is the box's 10 V regulator that has the least margin.
 
 ### Older unit: data-logger board (photos, 2025-03-06)
 
@@ -321,6 +321,7 @@ flowchart LR
 - [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, header J7, temperature range (its J7 labels RX1/TX1 are from base-board rev B; rev D and later carry RX0/TX0, see [lora/README.md](../lora/README.md#board-pins-rak4631)).
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
+- [Mouser – CUI SMI6B series][smi6b] and [Digi-Key – SMI6B listing][dk-smi6b]: the Oracle's 9 V wall adapter family (regulated, 6 W, overvoltage and short-circuit protection, center positive).
 - [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).
 - [TI – MAX232][max232]: RS-232 driver/receiver on the older data-logger board.
 - [TI – SN74LVC1T45][lvc1t45]: single-bit dual-supply level translator, one candidate for U4 (unconfirmed).
@@ -367,6 +368,8 @@ flowchart LR
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
 [lp38691]: https://www.ti.com/product/LP38691
+[smi6b]: https://eu.mouser.com/new/cui-inc/cui-smi6b-acdc-power-supply/
+[dk-smi6b]: https://www.digikey.com/en/products/detail/cui-inc/SMI6B-5-4-P6/10264713
 [max232]: https://www.ti.com/product/MAX232
 [mmbz5230b]: https://www.jameco.com/Jameco/Products/ProdDS/1540965.pdf
 [smd-kg5]: https://smd.yooneed.one/code4b47.html
