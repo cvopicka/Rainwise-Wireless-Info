@@ -130,7 +130,7 @@ const uint8_t HEADER[3] = {0x33, 0x80, 0x00};
 #endif
 const uint16_t MY_STATION_ID = STATION_ID;
 const uint8_t ID_LEN = 2;
-const uint8_t AIR_MAX = 37;  // ID + 35-byte status message, the longest message
+const uint8_t AIR_MAX = 39;  // ID + 37-byte status message, the longest message
 
 void putId(uint8_t *p, uint16_t id) {
   p[0] = id >> 8;
@@ -155,7 +155,9 @@ void printId(uint16_t id) {
 //   13-14 average awake ms  15-16 longest awake ms  17-20 weather packets
 //   received (total)  21-24 UART bytes received (total)  25-26 TX errors
 //   27-28 packets dropped  29-30 channel found busy (total)  31-32 sent
-//   without a clear channel (total)  33-34 CRC
+//   without a clear channel (total)  33 power save (0 off, 1 on)
+//   34 station battery: byte 15 of the last weather packet, raw (volts =
+//   0.0291 x value + 0.20, see README; 0 = no packet yet)  35-36 CRC
 // Command, receiver -> station (or -> a receiver with the rain fix on):
 //   0-2 "RWC"  3 version  4-7 COMMAND_KEY  8 command  9 argument
 //   10 sequence number  11-12 CRC
@@ -164,8 +166,8 @@ void printId(uint16_t id) {
 //   0-2 "RWR"  3 version  4 flags (bit0 rain fix on, bit1 baseline known)
 //   5 counter sent to the display  6 last station counter  7-8 station
 //   restarts detected since boot  9 last command seq  10-13 uptime s  14-15 CRC
-const uint8_t MSG_VERSION = 2;
-const uint8_t STATUS_LEN = 35;
+const uint8_t MSG_VERSION = 3;  // 3: status gained power save and battery (37 bytes)
+const uint8_t STATUS_LEN = 37;
 const uint8_t CMD_LEN = 13;
 const uint8_t RAIN_LEN = 16;
 const uint8_t STATUS_MAGIC[3] = {'R', 'W', 'S'};
@@ -175,6 +177,7 @@ const uint8_t CMD_SET_MODE = 1;     // station: argument = handshake mode
 const uint8_t CMD_STATUS = 2;       // station: send a status message now
 const uint8_t CMD_RAIN_STATUS = 3;  // rain-fix receiver: send a rain report
 const uint8_t CMD_RAIN_RESYNC = 4;  // rain-fix receiver: counter = station's again
+const uint8_t CMD_SET_POWER = 5;    // station: argument 0 = power save off, 1 = on
 const uint32_t STATUS_INTERVAL_MS = 60000;
 
 // Station handshake modes (what CTS does), settable over the air.
@@ -333,13 +336,28 @@ void saveByte(const char *path, uint8_t value) {
 #if ROLE == ROLE_STATION
 
 const char *const MODE_FILE = "/hsmode";
+const char *const POWER_FILE = "/pwrsave";
 
 Framer uartFramer, usbFramer;
 uint8_t pending[PACKET_LEN];
 bool havePending = false;
 uint32_t sent = 0, dropped = 0, txErrors = 0, packetsIn = 0, uartBytes = 0;
 
-enum RadioState { RS_IDLE, RS_RX, RS_CAD, RS_TX_WEATHER, RS_TX_STATUS };
+enum RadioState { RS_IDLE, RS_RX, RS_CAD, RS_TX_WEATHER, RS_TX_STATUS, RS_SLEEP };
+
+// ---- Power save (settable over the air, saved in flash, off by default) ----
+// Receivers send commands right after hearing the station, so in power save
+// the station listens only for LISTEN_WINDOW_MS after each of its own
+// transmissions and puts the SX1262 to sleep (settings kept) the rest of the
+// time; a command takes about 80 ms on air and arrives within about 0.2 s.
+// The main loop also pauses 1 ms per pass so the nRF52 can sleep between
+// events (FreeRTOS tickless idle in the Adafruit core). Station data still
+// arrives by interrupt into the 64-byte UART buffer, which takes about 5.5 ms
+// to fill at 115200, so emptying it every ~1 ms is safe.
+const uint32_t LISTEN_WINDOW_MS = 500;
+uint8_t powerSave = 0;
+uint32_t listenUntilMs = 0;
+uint8_t lastBattery = 0;  // byte 15 of the last weather packet (0 = none yet)
 
 // ---- Listen before talk (for several stations on one frequency) ----
 // Before each transmission the station waits a random 0-JITTER_MAX_MS (so two
@@ -391,8 +409,14 @@ void loadMode() {
 
 void saveMode() { saveByte(MODE_FILE, mode); }
 
+void loadPower() {
+  uint8_t v;
+  if (loadByte(POWER_FILE, v) && v <= 1) powerSave = v;
+}
+
 void queuePacket(const uint8_t *p, const char *src) {
   packetsIn++;
+  lastBattery = p[14];  // byte 15: station battery (README byte map)
   if (havePending) dropped++;  // newer reading replaces one not yet sent
   memcpy(pending, p, PACKET_LEN);
   havePending = true;
@@ -477,6 +501,8 @@ void buildStatus(uint8_t *s) {
   put16(s + 27, min(dropped, (uint32_t)0xFFFF));
   put16(s + 29, min(channelBusy, (uint32_t)0xFFFF));
   put16(s + 31, min(sentAnyway, (uint32_t)0xFFFF));
+  s[33] = powerSave;
+  s[34] = lastBattery;
   sealMessage(s, STATUS_LEN);
   wakes = 0;
   awakeTotalMs = 0;
@@ -491,6 +517,11 @@ void handleCommand(const uint8_t *c) {
       saveMode();
       serviceHandshake();  // move CTS now, so the reply status shows the new level
     }
+  } else if (c[8] == CMD_SET_POWER && c[9] <= 1) {
+    if (c[9] != powerSave) {
+      powerSave = c[9];
+      saveByte(POWER_FILE, powerSave);
+    }
   } else if (c[8] != CMD_STATUS) {
     return;
   }
@@ -502,7 +533,8 @@ void handleCommand(const uint8_t *c) {
     Serial.print(" seq ");
     Serial.print(c[10]);
     Serial.print(", mode now ");
-    Serial.println(MODE_NAMES[mode]);
+    Serial.print(MODE_NAMES[mode]);
+    Serial.println(powerSave ? ", power save on" : ", power save off");
   }
 }
 
@@ -557,6 +589,7 @@ void setup() {
   if (ON_SLEEP_PIN >= 0) pinMode(ON_SLEEP_PIN, OUTPUT);
   InternalFS.begin();
   loadMode();
+  loadPower();
   serviceHandshake();
   Serial.begin(115200);              // USB CDC; baud is ignored
   HDR_SERIAL.begin(STATION_UART_BAUD);  // J7 RX0 <- XBee socket DIN, pin 3
@@ -570,6 +603,7 @@ void setup() {
   Serial.print(" MHz, handshake ");
   Serial.print(MODE_NAMES[mode]);
   Serial.print(COMMANDS_ENABLED ? ", commands on" : ", commands OFF (no local_config.h)");
+  Serial.print(powerSave ? ", power save on" : ", power save off");
   Serial.print(", airtime per packet ms: ");
   Serial.println(radio.getTimeOnAir(ID_LEN + PACKET_LEN) / 1000.0);
   statusDue = true;  // announce a restart
@@ -592,6 +626,7 @@ void loop() {
       radio.finishTransmit();
       bool wasWeather = radioState == RS_TX_WEATHER;
       radioState = RS_IDLE;
+      listenUntilMs = millis() + LISTEN_WINDOW_MS;  // command window (power save)
       if (wasWeather) {
         sent++;
         if (debugText) {
@@ -625,26 +660,34 @@ void loop() {
   }
 
   // Something to send: schedule it after a random delay, then check the
-  // channel (or just send, with LBT off). Otherwise listen for commands.
-  if (radioState == RS_IDLE || radioState == RS_RX) {
+  // channel (or just send, with LBT off). Otherwise listen for commands
+  // (always, or only inside the window after a transmission in power save).
+  if (radioState == RS_IDLE || radioState == RS_RX || radioState == RS_SLEEP) {
     if ((havePending || statusDue) && !txWaiting) {
       txWaiting = true;
       txTries = 0;
       nextTryMs = millis() + random(0, JITTER_MAX_MS + 1);
     }
+    bool listen = !powerSave || (int32_t)(listenUntilMs - millis()) > 0;
     if (txWaiting && (int32_t)(millis() - nextTryMs) >= 0) {
       radioIrq = false;
+      if (radioState == RS_SLEEP) radio.standby();  // wake the SX1262 first
       if (LBT_ENABLED && radio.startChannelScan() == RADIOLIB_ERR_NONE) {
         radioState = RS_CAD;
         cadStartMs = millis();
       } else {
         sendNext();
       }
-    } else if (radioState == RS_IDLE) {
+    } else if (listen && radioState != RS_RX) {
       radioIrq = false;
       if (radio.startReceive() == RADIOLIB_ERR_NONE) radioState = RS_RX;
+    } else if (!listen && radioState != RS_SLEEP) {
+      radioIrq = false;
+      radio.sleep(true);  // warm sleep: settings kept
+      radioState = RS_SLEEP;
     }
   }
+  if (powerSave) delay(1);  // let the nRF52 sleep until the next tick or interrupt
 }
 
 // ===================== Receiver =====================
@@ -653,10 +696,14 @@ void loop() {
 uint32_t good = 0, bad = 0;
 uint32_t otherGood = 0, otherHeard = 0;  // packets from other stations' IDs
 uint16_t lastOtherId = 0;
-uint8_t cmdSeq = 0;
+uint8_t cmdSeq = 0;  // starts at a random value (setup) so a restart can't match an old reply
 uint8_t cmd[CMD_LEN];
-bool cmdPending = false;
+bool cmdPending = false;  // until confirmed or CMD_MAX_TRIES sends
+uint8_t cmdTries = 0;
+bool cmdBlindSent = false;
+const uint8_t CMD_MAX_TRIES = 5;
 uint32_t cmdQueuedMs = 0, lastHeardMs = 0;
+uint8_t stationPower = 0xFF;  // power save as last reported by the station (0xFF = unknown)
 
 // ---- Rain-counter fix (a per-board setting, off by default) ----
 // The station's rain counter (byte 13) restarts at 0 whenever the station
@@ -819,6 +866,15 @@ void printStatus(const uint8_t *s) {
   Serial.print(s[5] & 8 ? "on" : "OFF");
   Serial.print(", last command ");
   Serial.print(s[6]);
+  Serial.print(", power save ");
+  Serial.print(s[33] ? "on" : "off");
+  Serial.print(", battery ");
+  if (s[34]) {
+    Serial.print(0.0291 * s[34] + 0.20, 2);  // byte 15 formula (README byte map)
+    Serial.print(" V");
+  } else {
+    Serial.print("unknown");
+  }
 }
 
 void queueCommand(uint8_t command, uint8_t arg) {
@@ -834,18 +890,25 @@ void queueCommand(uint8_t command, uint8_t arg) {
   cmd[10] = ++cmdSeq;
   sealMessage(cmd, CMD_LEN);
   cmdPending = true;
+  cmdTries = 0;
+  cmdBlindSent = false;
   cmdQueuedMs = millis();
   Serial.print("command seq ");
   Serial.print(cmdSeq);
-  Serial.println(" queued; sent after the next station transmission");
+  Serial.println(" queued; sent after the next station transmission, repeated until confirmed");
 }
 
-// The station listens between its own transmissions, so send right after
-// hearing it (or after 3 s of silence, when it is only listening). A command
-// goes first; a rain report waits for the next turn.
+// The station listens right after its own transmissions (in power save only
+// then), so send right after hearing it. One extra "blind" try after 3 s of
+// silence covers a station that is listening but not sending. A command is
+// repeated after each station transmission until a reply carries its sequence
+// number (station status, or a rain report), up to CMD_MAX_TRIES sends. A
+// command goes first; a rain report waits for the next turn.
 void sendCommandIfDue(bool justHeard) {
   if (!cmdPending && !rainReportPending) return;
-  if (!justHeard && millis() - lastHeardMs < 3000 && millis() - cmdQueuedMs < 3000) return;
+  bool quiet = millis() - lastHeardMs >= 3000 && millis() - cmdQueuedMs >= 3000;
+  bool blind = !justHeard && quiet && cmdPending && !cmdBlindSent;
+  if (!justHeard && !blind && !(quiet && !cmdPending)) return;
   const uint8_t *msg = cmdPending ? cmd : rainReport;
   size_t len = cmdPending ? CMD_LEN : RAIN_LEN;
   uint8_t air[AIR_MAX];
@@ -854,9 +917,16 @@ void sendCommandIfDue(bool justHeard) {
   int16_t state = radio.transmit(air, ID_LEN + len);
   radioIrq = false;
   if (cmdPending) {
-    cmdPending = false;
+    cmdTries++;
+    if (blind) cmdBlindSent = true;
     Serial.print(state == RADIOLIB_ERR_NONE ? "command sent, seq " : "command send failed, seq ");
-    Serial.println(cmd[10]);
+    Serial.print(cmd[10]);
+    Serial.print(", try ");
+    Serial.println(cmdTries);
+    if (cmdTries >= CMD_MAX_TRIES) {
+      cmdPending = false;
+      Serial.println("command not confirmed after 5 tries; type it again");
+    }
   } else {
     rainReportPending = false;
     if (debugText) Serial.println(state == RADIOLIB_ERR_NONE ? "rain report sent" : "rain report send failed");
@@ -879,6 +949,8 @@ void printSettings() {
   Serial.print(rainFix ? "on" : "off");
   Serial.print(", commands ");
   Serial.print(COMMANDS_ENABLED ? "on" : "OFF");
+  Serial.print(", station power save ");
+  Serial.print(stationPower == 0xFF ? "unknown" : (stationPower ? "on" : "off"));
   Serial.print(", good ");
   Serial.print(good);
   Serial.print(" bad ");
@@ -936,7 +1008,7 @@ void handleKey(char k) {
     if (debugText)
       Serial.println("text mode: 0/1/2 set station handshake, s = status, i = this board's settings, "
                      "r = rain report, R = rain resync, F = rain fix on/off, "
-                     "A = listen to all stations on/off, d = raw");
+                     "A = listen to all stations on/off, P = station power save on/off, d = raw");
   } else if (!debugText) {
     return;
   } else if (k >= '0' && k <= '2') {
@@ -981,6 +1053,13 @@ void handleKey(char k) {
     listenAll = !listenAll;
     saveRxConfig();
     Serial.println(listenAll ? "listening to ALL stations (saved)" : "own station only (saved)");
+  } else if (k == 'P') {
+    // Toggle from what the station last reported (unknown counts as off).
+    uint8_t target = stationPower == 1 ? 0 : 1;
+    if (!confirmed('P', target ? "press P again within 5 s to turn station power save ON"
+                               : "press P again within 5 s to turn station power save OFF"))
+      return;
+    queueCommand(CMD_SET_POWER, target);
   } else if (k == 'i') {
     printSettings();
   }
@@ -988,6 +1067,8 @@ void handleKey(char k) {
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
+  randomSeed(NRF_FICR->DEVICEID[0] ^ NRF_FICR->DEVICEID[1]);
+  cmdSeq = random(0, 256);
   InternalFS.begin();
   uint8_t cfg = 0;
   if (loadByte(RX_CONFIG_FILE, cfg)) {
@@ -1041,6 +1122,15 @@ void loop() {
   } else {
     lastHeardMs = millis();
     if (ok) good++;
+    if (status) stationPower = p[33];
+    // A reply carrying our sequence number confirms the pending command.
+    bool ack = (status && p[6] == cmd[10]) || (rainMsg && p[9] == cmd[10]);
+    if (cmdPending && cmdTries > 0 && ack) {
+      cmdPending = false;
+      Serial.print("command seq ");
+      Serial.print(cmd[10]);
+      Serial.println(" confirmed");
+    }
     if (status && !debugText) writeUsbStatus(id, p);  // metadata for the logger
     if (otherCmd) handleRainCommand(p);
     if (ok) {

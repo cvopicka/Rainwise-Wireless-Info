@@ -55,10 +55,20 @@ PACKET_LEN = 32
 
 # Station status frame from a LoRa receiver's USB port (lora/README.md):
 # "RWT", station ID (2, big-endian), RSSI (dBm, signed), SNR (dB x 4, signed),
-# then the 35-byte status message: "RWS", version 2, ... CRC-16/XMODEM.
+# then the status message: "RWS", version, ... CRC-16/XMODEM. Version 2 is
+# 35 bytes; version 3 (2026-11-15) is 37, adding power save and the station
+# battery (byte 15 of its last weather packet). Both are accepted.
 STATUS_TAG = b"RWT"
-STATUS_MSG_LEN = 35
-STATUS_FRAME_LEN = 7 + STATUS_MSG_LEN
+STATUS_MSG_LENS = {2: 35, 3: 37}
+STATUS_FRAME_MAX = 7 + max(STATUS_MSG_LENS.values())
+
+
+def status_frame_len(buf):
+    """Frame length from the version byte, None if unknown, 0 if not enough bytes yet."""
+    if len(buf) < 11:
+        return 0
+    n = STATUS_MSG_LENS.get(buf[10])
+    return 7 + n if n else None
 HANDSHAKE_MODES = {0: "mirror", 1: "cts-low", 2: "released"}
 
 
@@ -144,10 +154,10 @@ def le(p, i, n):
 def parse_status_frame(f: bytes):
     """Status frame -> dict of station_status columns, or None if it doesn't check out.
     Field layout: the "Status" comment in lora/rainwise_lora/rainwise_lora.cpp."""
-    if len(f) != STATUS_FRAME_LEN or f[:3] != STATUS_TAG:
+    if f[:3] != STATUS_TAG or len(f) != status_frame_len(f):
         return None
     m = f[7:]
-    if m[:3] != b"RWS" or m[3] != 2:
+    if m[:3] != b"RWS":
         return None
     if crc16_xmodem(m[:-2]) != int.from_bytes(m[-2:], "big"):
         return None
@@ -172,12 +182,16 @@ def parse_status_frame(f: bytes):
         "dropped": le(m, 27, 2),
         "channel_busy": le(m, 29, 2),
         "sent_anyway": le(m, 31, 2),
+        # Version 3 only (None in older rows):
+        "power_save": m[33] if m[3] >= 3 else None,
+        "battery_raw": (m[34] or None) if m[3] >= 3 else None,  # 0 = no packet yet
+        "battery_v": round(0.0291 * m[34] + 0.20, 2) if m[3] >= 3 and m[34] else None,
         "raw_hex": m.hex(" ").upper(),
     }
 
 
 def _blank_status_frame():
-    m = b"RWS\x02" + bytes(29)
+    m = b"RWS\x03" + bytes(31)
     return STATUS_TAG + bytes(4) + m + crc16_xmodem(m).to_bytes(2, "big")
 
 
@@ -210,11 +224,12 @@ class Framer:
             # that sits 5 bytes in front of the next header.
             if j >= 0 and (i < 0 or j < i - 5):
                 del self.buf[:j]
-                if len(self.buf) < STATUS_FRAME_LEN:
+                n = status_frame_len(self.buf)
+                if n == 0 or (n and len(self.buf) < n):
                     return
-                row = parse_status_frame(bytes(self.buf[:STATUS_FRAME_LEN]))
+                row = parse_status_frame(bytes(self.buf[:n])) if n else None
                 if row:
-                    del self.buf[:STATUS_FRAME_LEN]
+                    del self.buf[:n]
                     yield "status", row
                 else:
                     self.bad += 1
@@ -294,6 +309,11 @@ def db_writer(q: queue.Queue):
     # Databases made before station IDs existed: add the column.
     if "station_id" not in [r[1] for r in con.execute("PRAGMA table_info(packets)")]:
         con.execute("ALTER TABLE packets ADD COLUMN station_id TEXT")
+    # Databases made before status version 3: add its columns.
+    have = [r[1] for r in con.execute("PRAGMA table_info(station_status)")]
+    for c in ("power_save", "battery_raw", "battery_v"):
+        if c not in have:
+            con.execute(f"ALTER TABLE station_status ADD COLUMN {c} REAL")
     con.commit()
     log(f"database ready at {DB_PATH}")
     last_cleanup = 0.0
