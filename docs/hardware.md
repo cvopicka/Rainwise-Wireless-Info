@@ -332,7 +332,7 @@ flowchart LR
 - [RAKwireless – RAK19003 Mini Base Board datasheet][rak19003]: power inputs and limits, header J7, temperature range (its J7 labels RX1/TX1 are from base-board rev B; rev D and later carry RX0/TX0, see [lora/README.md](../lora/README.md#board-pins-rak4631)).
 - [Rainwise – IP-100 User's Guide][rw-ip100] (PDF): built-in LR receiver; external receiver only for legacy 418/433 MHz models.
 - [TI – LP38691][lp38691]: the receiver board's 3.3 V regulator (U3), 2.7-10 V input, 500 mA.
-- [Rainwise – Weather Oracle MKIII & MKIII-LR User's Guide][oracle-guide] (rev. 7/08/14; the PDF is on the product's support page, **verify** link): power, cable warning, battery backup of the receiver, diagnostic mode.
+- [Rainwise – Weather Oracle MKIII & MKIII-LR User's Guide][oracle-guide] (rev. 7/08/14, PDF): power, cable warning, battery backup of the receiver, diagnostic mode.
 - [Mouser – CUI SMI6B series][smi6b] and [Digi-Key – SMI6B listing][dk-smi6b]: the Oracle's 9 V wall adapter family (regulated, 6 W, overvoltage and short-circuit protection, center positive).
 - [Diodes Inc. – MMBZ52xxB datasheet][mmbz5230b] (PDF, via Jameco) and [SMD marking code database][smd-kg5]: marking KG5 = MMBZ5230B, 4.7 V Zener (receiver board D1).
 - [TI – MAX232][max232]: RS-232 driver/receiver on the older data-logger board.
@@ -380,7 +380,7 @@ flowchart LR
 [rak4631-qs]: https://docs.rakwireless.com/product-categories/wisblock/rak4631/quickstart/
 [max3485]: https://www.analog.com/en/products/max3485
 [lp38691]: https://www.ti.com/product/LP38691
-[oracle-guide]: https://rainwise.com/oracle-multi-display
+[oracle-guide]: https://rainwise.com/mwdownloads/download/link/id/424
 [smi6b]: https://eu.mouser.com/new/cui-inc/cui-smi6b-acdc-power-supply/
 [dk-smi6b]: https://www.digikey.com/en/products/detail/cui-inc/SMI6B-5-4-P6/10264713
 [max232]: https://www.ti.com/product/MAX232
