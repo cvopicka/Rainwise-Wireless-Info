@@ -230,6 +230,17 @@ Five signal wires plus power. The breakout ([SparkFun BOB-08276][sf-xbee-bob]) p
 | J7 plug | TX0 | **white** (ON/SLEEP) |
 | J7 plug | RX0 | **green** (station data) |
 
+**Receiver connectors.** The station, receiverIP100 and receiverOracle boards all have the same J6 and J7 headers (receiverNAS has none; it only uses USB), so any of them can take either role and the station harness fits whichever board the scanner picks. A receiver uses only the J7 plug, with two wires:
+
+| Plug | Over pin | Wire |
+| --- | --- | --- |
+| J7 plug | BOOT | **empty** |
+| J7 plug | GND | **black** (ground) |
+| J7 plug | TX0 | **white** (data out to the Oracle or IP-100, 9600 8N1) |
+| J7 plug | RX0 | **empty** |
+
+J6 is not used on a receiver. Black and white sit in the same positions as on the station's J7 plug. Where they land at the Oracle's receiver box and the IP-100 depends on tasks 3 and 4 (pinouts and logic level not yet known; the Oracle link may be 5 V logic, **verify**).
+
 Check each plug position against its pin with the meter before first use: the J6 VDD and J7 BOOT positions must never get a wire.
 
 **Do not connect:**
