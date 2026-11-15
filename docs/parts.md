@@ -31,6 +31,7 @@ Bought for this project but staying on the bench.
 | [HiLetgo USB Logic Analyzer Device with EMI Ferrite Ring USB Cable 24MHz 8CH 24MHz 8 Channel UART IIC SPI Debug][logic] | 1 | tool | $12.69 | Amazon | Capturing the Oracle box's RJ11 data (0-5 V inputs only) | |
 | [Goupchn SMD IC Test Hook Clips with Silicone Jumper Wires, 10 Colors][hooks] | 1 set | tool | $20.99 | Amazon | Clipping onto header pins and test points | |
 | [Waveshare UART Communication Board Supports XBee Connectivity][waveshare-xbee] (CP2102) | 1 | tool | $9.99 | Amazon | Reading the XBees on the PC (XCTU) | Bought 2024, earlier in the project |
+| [Pack of 10 pcs 500mA F0.5AL Fast-Blow Fuse 0.5A 0.5amp 250V Ceramic Fuses 0.2 x 0.79 inch / 5 x 20 mm (F0.5A Ceramic)][meter-fuse] | 1 pack (10) | 1 | $4.99 per pack | Amazon | Replacement for the multimeter's mA-range fuse (blown before the station current measurement) | Meter marking: 0.5A F250V, 5x20 mm ceramic. "L" = low breaking capacity: fine for this project's 6 V / 5 V circuits; use an "H" fuse if the meter is ever used on mains |
 
 ## Weather station
 
@@ -90,6 +91,7 @@ One line per order.
 | Amazon | Buck converters | $0.00 |
 | Amazon | USB-C plugs | $0.00 |
 | Amazon | Logic analyzer, test hooks | $0.00 |
+| Amazon | Meter fuses | $0.00 |
 | Amazon (2024) | Waveshare XBee USB board | $0.00 |
 
 ## Totals
@@ -97,9 +99,9 @@ One line per order.
 | | Amount |
 | --- | --- |
 | System parts | $179.31 |
-| Tools and test gear | $54.17 |
+| Tools and test gear | $59.16 |
 | Shipping | $9.32 |
-| **Total spent** | **$242.80** |
+| **Total spent** | **$247.79** |
 
 ## References
 
@@ -109,6 +111,7 @@ One line per order.
 - [XH connector kit (Amazon)][xh-kit]
 - [HiLetgo logic analyzer (Amazon)][logic], [Goupchn test hook clips (Amazon)][hooks]
 - [Waveshare XBee USB board (Amazon)][waveshare-xbee]
+- [Meter fuses (Amazon)][meter-fuse]
 - Software: [PlatformIO][platformio], [pyserial][pyserial], [PulseView][pulseview], [Digi XCTU][xctu], [VS Code][vscode], [Claude Code][claude-code]
 - Rainwise: [MK-III RTI-LR][rw-mk3], [Oracle Multi-Display][rw-oracle], [IP-100][rw-ip100], [MK-III SLA battery][rw-battery]
 - SparkFun: [BOB-08276][bob-08276], [PRT-10112][prt-10112], [PRT-00115][prt-00115], [PRT-10158][prt-10158], [DEV-15096][dev-15096]
@@ -130,6 +133,7 @@ One line per order.
 [vscode]: https://code.visualstudio.com/
 [claude-code]: https://claude.com/claude-code
 [rw-battery]: https://rainwise.com/mk-iii-sla-battery
+[meter-fuse]: https://www.amazon.com/dp/B07KZRR3GL
 [bob-08276]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
 [prt-10112]: https://www.sparkfun.com/straight-header-male-pth-2mm-10-pin.html
 [prt-00115]: https://www.sparkfun.com/straight-header-female-pth-0-1in-40-pin.html
