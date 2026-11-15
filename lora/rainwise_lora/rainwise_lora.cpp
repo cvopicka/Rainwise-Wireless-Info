@@ -349,12 +349,17 @@ enum RadioState { RS_IDLE, RS_RX, RS_CAD, RS_TX_WEATHER, RS_TX_STATUS };
 // LoRa transmission is detected it backs off a random BACKOFF_MIN_MS to
 // BACKOFF_MAX_MS and tries again; after LBT_MAX_TRIES it sends anyway, so a
 // packet is never held long enough to be replaced by the next one (2 s).
-// Worst case about 0.7 s of delay. LBT_ENABLED 0 in local_config.h turns
+// Worst case about 1.3 s of delay. LBT_ENABLED 0 in local_config.h turns
 // the channel check off (the random delay stays).
+// Why 400 ms: CAD can't hear a transmission that starts within a few ms of its
+// own scan (SF10/500 kHz symbol = 2.05 ms), so two stations whose random
+// delays land that close both see a clear channel and collide. With 0-40 ms
+// that happened about a third of the time on the bench (two stations in
+// lockstep, 2026-11-14); 0-400 ms makes it rare and stays well under 2 s.
 #ifndef LBT_ENABLED
 #define LBT_ENABLED 1
 #endif
-const uint16_t JITTER_MAX_MS = 40;
+const uint16_t JITTER_MAX_MS = 400;
 const uint16_t BACKOFF_MIN_MS = 30, BACKOFF_MAX_MS = 150;
 const uint8_t LBT_MAX_TRIES = 5;
 bool txWaiting = false;  // a send is scheduled for nextTryMs
