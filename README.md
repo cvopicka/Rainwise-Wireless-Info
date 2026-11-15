@@ -19,6 +19,7 @@ Recently I had a power failure at home.  When the power returned my Oracle displ
 | README.md (this page) | Overview, packet framing and byte map, tools, test plan |
 | [docs/protocol.md](docs/protocol.md) | How each field was confirmed (field notes), raw packet samples, IP-100 XML snapshot, sea-level pressure formula |
 | [docs/hardware.md](docs/hardware.md) | XBee settings, the Oracle display's RJ11 link and how to identify it, LoRa replacement plan, wiring diagrams, US radio rules |
+| [docs/parts.md](docs/parts.md) | Parts bought for the LoRa replacement: where from, price paid, project total |
 | [lora/README.md](lora/README.md) | RAK4631 firmware: radio settings, pins, building and flashing, bench test |
 
 ## Inspection

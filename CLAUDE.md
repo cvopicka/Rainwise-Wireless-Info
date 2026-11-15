@@ -17,6 +17,7 @@ Private, machine-specific details (IP addresses, elevation, location, radio netw
 | --- | --- |
 | `README.md` | Overview, byte map, tools, test plan (public) |
 | `docs/nas-service.md` | NAS logging service: data flow, settings, tables, TrueNAS install/update, example SQL (daily rain etc.), troubleshooting |
+| `docs/parts.md` | Parts list: item names as on the seller's site, qty bought vs used, price paid, links, project total (owner wants prices kept) |
 | `docs/protocol.md` | Field notes / evidence per byte, raw samples, XML snapshot, sea-level pressure |
 | `docs/hardware.md` | XBee config, RJ11 display link, LoRa plan and options, wiring diagrams, FCC notes |
 | `rainwise_logger.py` | PC test logger: XBee serial -> CSV, CRC check, decode, polls IP-100 XML. `--test` runs a self-test |
