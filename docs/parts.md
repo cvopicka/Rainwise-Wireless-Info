@@ -32,6 +32,16 @@ Bought for this project but staying on the bench.
 | [Goupchn SMD IC Test Hook Clips with Silicone Jumper Wires, 10 Colors][hooks] | 1 set | tool | $20.99 | Amazon | Clipping onto header pins and test points | |
 | [Waveshare UART Communication Board Supports XBee Connectivity][waveshare-xbee] (CP2102) | 1 | tool | $9.99 | Amazon | Reading the XBees on the PC (XCTU) | Bought 2024, earlier in the project |
 
+## Weather station
+
+The existing Rainwise equipment this project works with. Bought before the project as a package; the price isn't known, so none of it is counted in the totals. Names and part numbers are from Rainwise's current product pages, which may differ slightly from older units (**verify** against your own labels).
+
+| Item | Part no. | Role | Notes |
+| --- | --- | --- | --- |
+| [MK-III RTI-LR Sensor Assembly with Rain Gauge][rw-mk3] | 800-0009 | The outdoor station: sensors, controller, XBee radio | Ours is labeled MK-III-LR; Rainwise rates the XBee link at about 1 mile line of sight. This project replaces its XBee with a RAK4631 |
+| [Oracle Multi-Display][rw-oracle] | 801-000 (as shown on the page; **verify**) | Indoor display, fed by its XBee receiver box over a phone cable | Gets its own RAK receiver |
+| [IP-100 Network Interface][rw-ip100] | 802-0001 | Internet gateway with its own XBee receiver; serves `status.xml` | Gets its own RAK receiver |
+
 ## Also needed (already on hand)
 
 Not bought for this project, so not counted in the total, but you need them to build it. Prices aren't given; most electronics benches already have these.
@@ -89,6 +99,7 @@ One line per order.
 - [HiLetgo logic analyzer (Amazon)][logic], [Goupchn test hook clips (Amazon)][hooks]
 - [Waveshare XBee USB board (Amazon)][waveshare-xbee]
 - Software: [PlatformIO][platformio], [pyserial][pyserial], [PulseView][pulseview], [Digi XCTU][xctu]
+- Rainwise: [MK-III RTI-LR][rw-mk3], [Oracle Multi-Display][rw-oracle], [IP-100][rw-ip100]
 - SparkFun: [BOB-08276][bob-08276], [PRT-10112][prt-10112], [PRT-00115][prt-00115], [PRT-10158][prt-10158], [DEV-15096][dev-15096]
 
 [rak-kit]: https://www.amazon.com/dp/B0DFMMTQZM
@@ -102,6 +113,9 @@ One line per order.
 [pyserial]: https://pyserial.readthedocs.io/
 [pulseview]: https://sigrok.org/wiki/PulseView
 [xctu]: https://www.digi.com/products/embedded-systems/digi-xbee/digi-xbee-tools/xctu
+[rw-mk3]: https://rainwise.com/mk-iii-rti-lr-sensor-assembly-with-rain-gauge
+[rw-oracle]: https://rainwise.com/oracle-multi-display
+[rw-ip100]: https://rainwise.com/ip-100-network-interface
 [bob-08276]: https://www.sparkfun.com/breakout-board-for-xbee-module.html
 [prt-10112]: https://www.sparkfun.com/straight-header-male-pth-2mm-10-pin.html
 [prt-00115]: https://www.sparkfun.com/straight-header-female-pth-0-1in-40-pin.html
