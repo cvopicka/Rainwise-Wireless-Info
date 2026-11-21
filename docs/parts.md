@@ -17,6 +17,7 @@ These end up installed: the station transmitter and its adapter, and the receive
 | [Straight Header - Male (PTH, 2mm, 10-Pin) (PRT-10112)][prt-10112] | 8 | 2 | $1.05 each ($8.40) | SparkFun | Pins on the station breakout | |
 | [PW-D Control Buck Converter 6-24V to 5V 1.5A Step-Down Regulator Module Power Inverter Volt Stabilizer][buck] (pack of 4) | 1 pack (4) | 1 | $13.99 per pack | Amazon | Station: battery to 5 V for the RAK | |
 | [5 Pcs USB Type C Solderless Connector Screw Terminal Adapter Type C 2 Pin Connector USB-C Breakout Board 5V 3A Male to 2 Pin Terminal Block for Smart Device Power Charging Repair DIY][usbc-plug] | 1 pack (5) | TBD | $8.59 per pack | Amazon | Power into the RAK's USB-C without a cut cable | |
+| [RAK19003 Meshtastic Phone Backpack Case][nas-case] by Darkextratoasty (Printables, [CC BY 4.0][cc-by]) | 1 printed | 1 | $0 (filament on hand) | Printables (free model) | NAS receiver enclosure | RAK19003 held by 3 M2.5 screws (included with the RAK kit); snap-on lid; hole for an SMA-to-U.FL antenna cable. Variants: case-mag (M3 nut + magnet), case-zip (zip-tie channel), tall versions, lid with 0.96" OLED cutout. CC BY allows remixes with credit, so it can be the base for the other receiver boxes |
 | [Straight Header - Female (PTH, 0.1in., 40-Pin) (PRT-00115)][prt-00115] | 1 | 0 | $1.95 | SparkFun | Spare | Bought in case mounting needed it; not used |
 | [Long Header - Male (PTH, 0.1in., 40-Pin) (PRT-10158)][prt-10158] | 1 | 0 | $3.50 | SparkFun | Spare | Bought in case mounting needed it; not used |
 | [2.54mm XH Connector Socket Kit with pre-Crimped Cable Wire 2/3/4/5/6/7 Pin Housing JST Adapter Cable Male and Female Compatible with JST-XH Connector (Connector&Socket)][xh-kit] | 1 variety pack | 4-pin sets as needed | $0.00 (on hand) | Amazon | Harness between breakout and RAK (J6 and J7) | Left over from an earlier project (bought 2021, $20.99 per pack); not counted |
@@ -135,11 +136,14 @@ One line per order.
 - [HiLetgo logic analyzer (Amazon)][logic], [Goupchn test hook clips (Amazon)][hooks]
 - [Waveshare XBee USB board (Amazon)][waveshare-xbee]
 - [Meter fuses (Amazon)][meter-fuse]
+- [RAK19003 Meshtastic Phone Backpack Case (Printables)][nas-case], licensed [CC BY 4.0][cc-by]
 - Software: [PlatformIO][platformio], [pyserial][pyserial], [PulseView][pulseview], [Digi XCTU][xctu], [VS Code][vscode], [Claude Code][claude-code]
 - Rainwise: [MK-III RTI-LR][rw-mk3], [Oracle Multi-Display][rw-oracle], [IP-100][rw-ip100], [MK-III SLA battery][rw-battery]
 - SparkFun: [BOB-08276][bob-08276], [PRT-10112][prt-10112], [PRT-00115][prt-00115], [PRT-10158][prt-10158], [DEV-15096][dev-15096]
 
 [rak-kit]: https://www.amazon.com/dp/B0DFMMTQZM
+[nas-case]: https://www.printables.com/model/714895-rak19003-meshtastic-phone-backpack-case
+[cc-by]: https://creativecommons.org/licenses/by/4.0/
 [buck]: https://www.amazon.com/dp/B076P4C42B
 [usbc-plug]: https://www.amazon.com/dp/B0GYHRM564
 [xh-kit]: https://www.amazon.com/dp/B08G188ZQ8
