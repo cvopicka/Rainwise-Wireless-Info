@@ -17,7 +17,7 @@ These end up installed: the station transmitter and its adapter, and the receive
 | [Straight Header - Male (PTH, 2mm, 10-Pin) (PRT-10112)][prt-10112] | 8 | 2 | $1.05 each ($8.40) | SparkFun | Pins on the station breakout | |
 | [PW-D Control Buck Converter 6-24V to 5V 1.5A Step-Down Regulator Module Power Inverter Volt Stabilizer][buck] (pack of 4) | 1 pack (4) | 1 | $13.99 per pack | Amazon | Station: battery to 5 V for the RAK | |
 | [5 Pcs USB Type C Solderless Connector Screw Terminal Adapter Type C 2 Pin Connector USB-C Breakout Board 5V 3A Male to 2 Pin Terminal Block for Smart Device Power Charging Repair DIY][usbc-plug] | 1 pack (5) | TBD | $8.59 per pack | Amazon | Power into the RAK's USB-C without a cut cable | |
-| [RAK19003 Meshtastic Phone Backpack Case][nas-case] by Darkextratoasty (Printables, [CC BY 4.0][cc-by]) | 1 printed | 1 | $0 (filament on hand) | Printables (free model) | NAS receiver enclosure | RAK19003 held by 3 M2.5 screws (included with the RAK kit); snap-on lid; hole for an SMA-to-U.FL antenna cable. Variants: case-mag (M3 nut + magnet), case-zip (zip-tie channel), tall versions, lid with 0.96" OLED cutout. CC BY allows remixes with credit, so it can be the base for the other receiver boxes |
+| [RAK19003 Meshtastic Phone Backpack Case][nas-case] by Darkextratoasty (Printables, [CC BY 4.0][cc-by]) | 1 printed | 1 | $0 (filament on hand) | Printables (free model) | NAS receiver enclosure | Printed: case-plain-tall.stl + lid.stl. RAK19003 held by 3 M2.5 screws (included with the RAK kit); snap-on lid; hole for an SMA-to-U.FL antenna cable. Variants: case-mag (M3 nut + magnet), case-zip (zip-tie channel), tall versions, lid with 0.96" OLED cutout. CC BY allows remixes with credit, so it can be the base for the other receiver boxes |
 | [Straight Header - Female (PTH, 0.1in., 40-Pin) (PRT-00115)][prt-00115] | 1 | 0 | $1.95 | SparkFun | Spare | Bought in case mounting needed it; not used |
 | [Long Header - Male (PTH, 0.1in., 40-Pin) (PRT-10158)][prt-10158] | 1 | 0 | $3.50 | SparkFun | Spare | Bought in case mounting needed it; not used |
 | [2.54mm XH Connector Socket Kit with pre-Crimped Cable Wire 2/3/4/5/6/7 Pin Housing JST Adapter Cable Male and Female Compatible with JST-XH Connector (Connector&Socket)][xh-kit] | 1 variety pack | 4-pin sets as needed | $0.00 (on hand) | Amazon | Harness between breakout and RAK (J6 and J7) | Left over from an earlier project (bought 2021, $20.99 per pack); not counted |
@@ -101,6 +101,7 @@ Not bought yet; links and prices get filled in when ordered. Bought as kits so t
 | Panel-mount 5.5 × 2.1 mm DC barrel jack, center positive | Oracle box barrel input (original adapter) | |
 | RJ11 6P4C screw-terminal jack, or a phone cord to cut | Oracle box connection to the display cable | Keeps the current jack free as a test tool |
 | Breadboard + jumper wires | Bench trials before soldering | Skip if on hand |
+| Countersunk neodymium magnet + M3 nut (size to match case-mag.stl; **verify** from the model) | Oracle receiver box, if based on the case-mag variant (sticks to a metal surface) | Optional |
 | 0.187" piggyback Faston terminals | Station battery tap | |
 | Waterproof inline ATM (mini blade) fuse holder + 1 A ATM fuses | Station battery tap | |
 
