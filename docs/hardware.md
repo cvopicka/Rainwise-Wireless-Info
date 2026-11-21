@@ -137,7 +137,20 @@ Bench observation (2026-11-15, owner): with the 9 V adapter in the box and the b
 
 What it suggests (all **verify**): terminal 1 is the supply passed through a diode (or a line pulled up to the supply), which fits the manual's "power flows both ways" if each end feeds the other through a diode. Terminal 2 carries the data. The pattern doesn't match RS-485 (no pair of lines around +1 to +4 V), nor RS-232 idle (no negative line). A line idling near 0 V with short positive pulses would fit a logic-level signal that idles low (inverted TTL), but a meter can't show that; a capture can. **Logic analyzer inputs are rated 0-5 V only: never connect them to terminal 1 or 4**, and connect terminal 2 only after its peak voltage is known (use a resistor divider until then).
 
-Next readings to tell the two ends apart: (a) display unplugged from the splitter, adapter on: terminals 1 and 2 to ground (is the 8.2 V coming from the box?); (b) adapter unplugged, display on its batteries: terminals 4, 1 and 2 to ground (which end feeds which?); (c) terminal 2 to ground on the AC volts range, which shows activity a DC reading averages away.
+Follow-up readings (2026-11-20, owner, all to terminal 3):
+
+| Setup | T4 | T1 | T2 |
+| --- | --- | --- | --- |
+| Normal: adapter + box + display (above) | +8.9 V | +8.2 V | ≈0 V, jumping |
+| (a) Adapter on, display **unplugged** | — | 0.3 V | 0.4 V, steady |
+| (b) Adapter **unplugged**, display on its batteries | 0.69 V | +5.45 V | 6-300 mV, jumping |
+| (c) Normal, **AC** volts | | | 7.6-61 mV AC, varying |
+
+**How the power works (fits every reading so far; verify):** the box doesn't power its own electronics. The adapter's 9 V goes straight through the box to the display on **T4**. The display sends a supply back to the box on **T1**: the T4 supply through a diode (8.9 − 0.7 ≈ 8.2 V) when the adapter is on, or its own AAA batteries when it isn't (5.45 V, likely the batteries through a diode). With no display, T1 is dead (0.3 V) and so is the box, which is why its light stays off on the adapter alone. In (b) T4 stays near 0 V, so the display's batteries feed only T1, not the adapter line. This is how "the batteries keep the receiver active during a power outage" ([Rainwise – Weather Oracle User's Guide][oracle-guide]).
+
+**T2 is the data line (box to display):** it moves only when the box is running (normal and b, and AC activity in c) and sits still when the box is unpowered (a). It rests near 0 V, so it is probably a logic-level signal that idles **low** (inverted compared with a UART, whose idle is high); **verify** with a capture. Its peak can't be higher than the box's supply (T1): about 8.2 V on the adapter, 5.45 V on batteries.
+
+Design consequences (verify): a RAK replacement for the box must pass T4 through to the display, can take its own power from T1 (which gives it the display's battery backup during outages, though a RAK draws more than the XBee box, so the batteries would last less than the manual's 20 hours), and probably needs an inverter on its TX line to drive T2.
 
 ### Identifying the link with a meter
 
