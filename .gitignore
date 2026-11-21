@@ -35,3 +35,6 @@ lora/rainwise_lora/local_config.h
 
 # Private NAS compose (real IP-100 address, elevation, time zone)
 rainwise/docker-compose.local.yml
+
+# Generated from enclosures/*.scad (export with OpenSCAD)
+enclosures/*.stl
