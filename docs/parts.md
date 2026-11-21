@@ -64,14 +64,19 @@ Not bought for this project, so not counted in the total, but you need them to b
 | Multimeter (here a RadioShack 22-807) | Buck output, polarity, continuity, handshake levels, battery checks | |
 | Wire strippers and flush cutters | Harness wires; trimming the breakout's bottom tails flush | |
 | PC with free USB ports | Flashing and monitoring the boards, logging | Two or three boards at a time is enough for every bench test |
+| Calipers | Measuring parts for the printed enclosures | |
+| 3D printer (here an Elegoo Neptune 4 Pro) | Receiver enclosures | Several fit-test revisions per design are normal |
+| Duplex (splitter) phone adapter | Measuring the Oracle link with the display still connected | |
 | RJ11 jack with 4 screw terminals | Breakout for measuring the Oracle box's phone cable | Any surface-mount phone jack works |
 | **Consumables** | | |
 | Solder and flux | All joints | |
 | Hookup wire, five colors plus red | Station harness (green, black, blue, yellow, white; red for +5 V) | Colors in [lora/README.md](../lora/README.md) |
 | Kapton or electrical tape | Insulating the underside of the station breakout from the station board | |
+| Filament: PLA for indoor boxes, PETG or ASA for anything near the station or in sun | Enclosures | |
 | Cable ties and peelable silicone | Strain relief; holding the XH plugs in (XH has no latch) | |
 | **Cables and power** | | |
 | USB-C **data** cables, one per board on the PC | Flashing and monitoring | A charge-only cable powers the board but the PC never sees it |
+| USB-C PD charger that offers 9 V (here the Pine64 USB-C supply sold with the Pinecil; **verify** 9 V on its label) | Option for powering the Oracle receiver box (9 V to the display) through a PD trigger board | The original 9 V barrel adapter also works; the box is planned with both inputs |
 | USB charger or power bank with an "always on" mode | Powering a board away from the PC (bench and range tests) | Ordinary power banks shut off at the station's light load |
 | **Software** | | |
 | [PlatformIO][platformio] | Building and flashing the firmware | Free |
@@ -80,6 +85,23 @@ Not bought for this project, so not counted in the total, but you need them to b
 | [Digi XCTU][xctu] | Reading and setting the XBees | Free |
 | [Visual Studio Code][vscode] | Editing the code and docs; the PlatformIO and Claude Code extensions run inside it | Free |
 | [Claude Code][claude-code] (Anthropic) | AI coding partner: decoding the protocol, writing the firmware, logger and NAS service, the docs, and working through each bench test | Needs a paid Claude plan; not counted |
+
+## Still to order (planned, one combined order)
+
+Not bought yet; links and prices get filled in when ordered. Bought as kits so the Oracle capture result doesn't cause another order.
+
+| Item | For | Notes |
+| --- | --- | --- |
+| Resistor assortment, 1/4 W | Analyzer input divider, inverter, pull-ups | |
+| Transistor + diode assortment (2N3904/2N2222, 1N4148) | Probable inverter to drive the Oracle's data line (T2 idles low, **verify** with a capture) | |
+| Schottky diodes, 1 A or more (e.g. 1N5819) | Oracle box: OR-ing the barrel and USB-C 9 V inputs so two plugged-in supplies can't feed each other | About 0.3-0.5 V drop |
+| BSS138 4-channel logic level shifter modules | If the Oracle line turns out to be 5 V logic | |
+| USB-C PD trigger board, 9 V (fixed or jumper-set) | Oracle box USB-C input | A spare is useful |
+| Panel-mount 5.5 × 2.1 mm DC barrel jack, center positive | Oracle box barrel input (original adapter) | |
+| RJ11 6P4C screw-terminal jack, or a phone cord to cut | Oracle box connection to the display cable | Keeps the current jack free as a test tool |
+| Breadboard + jumper wires | Bench trials before soldering | Skip if on hand |
+| 0.187" piggyback Faston terminals | Station battery tap | |
+| Waterproof inline ATM (mini blade) fuse holder + 1 A ATM fuses | Station battery tap | |
 
 ## Shipping
 
