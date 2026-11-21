@@ -126,6 +126,19 @@ From Rainwise's *Weather Oracle MKIII & MKIII-LR User's Guide* (rev. 7/08/14) ([
 
 Bench observation (2026-11-15, owner): with the 9 V adapter in the box and the box's cable on a screw-terminal jack (no display), the box's green status light stays off; with the display connected it lights. On the screw-terminal jack (clip down, terminals 1-4 left to right, 4 = red): terminal 4 = the 9 V jack's center pin (+9 V), terminal 3 = the jack's sleeve (ground), so 1 and 2 are the data candidates. With the display connected and **no** 9 V adapter, the box runs from the display's batteries (as the manual says) and its green light flashes about every 2 s, as it does on 9 V: an activity light, one flash per packet. Since the box shows no activity on 9 V alone, a possible explanation (hypothesis, **verify**) is that the display sends a supply back to the box on terminal 1 or 2 and that powers the box's electronics, leaving one data line; a steady voltage on one of those terminals with the display connected would confirm it. Because the box seems to need the display attached, measure with the display connected, through a duplex (splitter) phone adapter so the original cable stays in place.
 
+**In-circuit reading (2026-11-20, owner):** 9 V adapter → box → duplex splitter → display (display on), screw-terminal jack on the splitter's spare port (clip down, 1-4 left to right, 4 = red); DC volts, red probe on the first pin named. Raw: 1→2 = +8.19 V; 2→3 = −0.014 to +0.2 V (jumping, best estimate); 3→4 = −8.9 V. Referred to terminal 3 (ground):
+
+| Terminal | Volts to ground | Reading |
+| :---: | --- | --- |
+| 4 (red) | +8.9 V, steady | supply (matches the 9 V jack center) |
+| 3 | 0 | ground |
+| 2 | about 0 V, jumping (−0.01 to +0.2 V) | **best data candidate**: a meter averages a short burst every 2 s into a small, unsteady reading |
+| 1 | about +8.2 V, steady | about one silicon diode drop (≈0.7 V) below terminal 4 |
+
+What it suggests (all **verify**): terminal 1 is the supply passed through a diode (or a line pulled up to the supply), which fits the manual's "power flows both ways" if each end feeds the other through a diode. Terminal 2 carries the data. The pattern doesn't match RS-485 (no pair of lines around +1 to +4 V), nor RS-232 idle (no negative line). A line idling near 0 V with short positive pulses would fit a logic-level signal that idles low (inverted TTL), but a meter can't show that; a capture can. **Logic analyzer inputs are rated 0-5 V only: never connect them to terminal 1 or 4**, and connect terminal 2 only after its peak voltage is known (use a resistor divider until then).
+
+Next readings to tell the two ends apart: (a) display unplugged from the splitter, adapter on: terminals 1 and 2 to ground (is the 8.2 V coming from the box?); (b) adapter unplugged, display on its batteries: terminals 4, 1 and 2 to ground (which end feeds which?); (c) terminal 2 to ground on the AC volts range, which shows activity a DC reading averages away.
+
 ### Identifying the link with a meter
 
 Box powered and connected to the display. First find ground: the RJ11 pin with 0 Ω (continuity) to the minus side of the 9 V adapter, with power off. Then, powered, measure every other pin to that ground. Because packets arrive every 2 s, an analog meter's needle will twitch on data lines, which is a quick way to spot them.
