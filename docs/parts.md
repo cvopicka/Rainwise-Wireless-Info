@@ -65,7 +65,7 @@ Not bought for this project, so not counted in the total, but you need them to b
 | Multimeter (here a RadioShack 22-807) | Buck output, polarity, continuity, handshake levels, battery checks | |
 | Wire strippers and flush cutters | Harness wires; trimming the breakout's bottom tails flush | |
 | PC with free USB ports | Flashing and monitoring the boards, logging | Two or three boards at a time is enough for every bench test |
-| M3 screws, nuts and heat-set inserts | Printed enclosures (case-mag magnet mount, lids, brackets) | |
+| M3 screws, nuts and threaded heat-set inserts | Printed enclosures (case-mag magnet mount, lids, brackets) | Inserts on hand in two sizes (knurl OD × length): 5.65 × 3.85 mm and 5.8 × 6.66 mm |
 | Calipers | Measuring parts for the printed enclosures | |
 | 3D printer (here an Elegoo Neptune 4 Pro) | Receiver enclosures | Several fit-test revisions per design are normal |
 | Duplex (splitter) phone adapter | Measuring the Oracle link with the display still connected | |
