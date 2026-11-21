@@ -65,6 +65,7 @@ Not bought for this project, so not counted in the total, but you need them to b
 | Multimeter (here a RadioShack 22-807) | Buck output, polarity, continuity, handshake levels, battery checks | |
 | Wire strippers and flush cutters | Harness wires; trimming the breakout's bottom tails flush | |
 | PC with free USB ports | Flashing and monitoring the boards, logging | Two or three boards at a time is enough for every bench test |
+| M3 screws, nuts and heat-set inserts | Printed enclosures (case-mag magnet mount, lids, brackets) | |
 | Calipers | Measuring parts for the printed enclosures | |
 | 3D printer (here an Elegoo Neptune 4 Pro) | Receiver enclosures | Several fit-test revisions per design are normal |
 | Duplex (splitter) phone adapter | Measuring the Oracle link with the display still connected | |
@@ -101,7 +102,7 @@ Not bought yet; links and prices get filled in when ordered. Bought as kits so t
 | Panel-mount 5.5 × 2.1 mm DC barrel jack, center positive | Oracle box barrel input (original adapter) | |
 | RJ11 6P4C screw-terminal jack, or a phone cord to cut | Oracle box connection to the display cable | Keeps the current jack free as a test tool |
 | Breadboard + jumper wires | Bench trials before soldering | Skip if on hand |
-| Countersunk neodymium magnet + M3 nut (size to match case-mag.stl; **verify** from the model) | Oracle receiver box, if based on the case-mag variant (sticks to a metal surface) | Optional |
+| Countersunk neodymium magnet (size to match case-mag.stl; **verify** from the model) | Oracle receiver box, if based on the case-mag variant (sticks to a metal surface) | Optional |
 | 0.187" piggyback Faston terminals | Station battery tap | |
 | Waterproof inline ATM (mini blade) fuse holder + 1 A ATM fuses | Station battery tap | |
 
